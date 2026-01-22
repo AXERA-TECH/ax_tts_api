@@ -1,0 +1,11 @@
+prefix=/opt/rzyang/Github/espeak-ng/install/ax650
+exec_prefix=/opt/rzyang/Github/espeak-ng/install/ax650
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: espeak-ng
+Description: espeak-ng is a multi-lingual software speech synthesizer
+Version: 1.52.0.1
+Requires:
+Libs: -L${libdir} -lespeak-ng
+Cflags: -I${includedir}

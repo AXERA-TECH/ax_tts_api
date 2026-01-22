@@ -27,6 +27,7 @@ public:
     std::string run(const std::string& input_text) {
         if (input_text.empty()) return "";
     
+        // 全角转半角
         std::string text = _fullwidth_to_halfwidth(input_text);
         
         // 1. 替换连续空白字符

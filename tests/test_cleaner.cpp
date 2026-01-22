@@ -33,6 +33,31 @@ static void test_input_text(const std::string& input_text) {
     printf("\n");
 }
 
+static void test_remove_continuous_spaces() {
+    std::string input_text("去除  连续\n  \t空格");
+
+    auto cleaned_text = g_cleaner.run(input_text);
+    printf("================================\n");
+    printf("test_remove_continuous_spaces:\n");
+    printf("input text: %s\n", input_text.c_str());
+    printf("cleaned text: %s\n", cleaned_text.c_str());
+    printf("\n");
+}
+
+static void test_remove_control_characters() {
+    std::string input_text("Remove control characters: ");
+    for (char i = 0; i < 32; i++) {
+        input_text += i;
+    }
+
+    auto cleaned_text = g_cleaner.run(input_text);
+    printf("================================\n");
+    printf("test_remove_continuous_spaces:\n");
+    printf("input text: %s\n", input_text.c_str());
+    printf("cleaned text: %s\n", cleaned_text.c_str());
+    printf("\n");
+}
+
 int main(int argc, char** argv) {
     cmdline::parser cmd;
     cmd.add<std::string>("text", 't', "Input text", false, "");
@@ -42,6 +67,8 @@ int main(int argc, char** argv) {
     auto input_text = cmd.get<std::string>("text");
     
     test_fullwidth_to_halfwidth();
+    test_remove_continuous_spaces();
+    test_remove_control_characters();
 
     if (!input_text.empty()) {
         test_input_text(input_text);
