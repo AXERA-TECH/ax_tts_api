@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.13 FATAL_ERROR)
-project(ax_asr_api)
+project(ax_tts_api)
 
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED True)
@@ -37,9 +37,9 @@ include_directories(${MSP_INC_DIR})
 link_directories(${MSP_LIB_DIR})
 
 # 第三方库
-include_directories(third_party/kaldi-native-fbank/include)
-link_directories(third_party/kaldi-native-fbank/lib/${CMAKE_SYSTEM_PROCESSOR})
-list(APPEND KALDI_LIBS kaldi-native-fbank-core kissfft-float)
+# include_directories(third_party/kaldi-native-fbank/include)
+# link_directories(third_party/kaldi-native-fbank/lib/${CMAKE_SYSTEM_PROCESSOR})
+# list(APPEND KALDI_LIBS kaldi-native-fbank-core kissfft-float)
 
 # Project sources
 aux_source_directory(src SRC)
@@ -47,21 +47,21 @@ aux_source_directory(src/utils SRC)
 aux_source_directory(src/ax_model_runner SRC)
 aux_source_directory(src/asr SRC)
 
-# libax_asr_api.so - 共享库
-add_library(ax_asr_api SHARED src/api/ax_asr_api.cpp ${SRC})
+# libax_tts_api.so - 共享库
+add_library(ax_tts_api SHARED src/api/ax_tts_api.cpp ${SRC})
 
 # 设置库属性
-set_target_properties(ax_asr_api PROPERTIES
-    OUTPUT_NAME "ax_asr_api"
-    PUBLIC_HEADER "src/api/ax_asr_api.h"
+set_target_properties(ax_tts_api PROPERTIES
+    OUTPUT_NAME "ax_tts_api"
+    PUBLIC_HEADER "src/api/ax_tts_api.h"
     POSITION_INDEPENDENT_CODE ON
 )
 
-# 链接依赖库到 ax_asr_api 库
-target_link_libraries(ax_asr_api PRIVATE ${MSP_LIBS} ${KALDI_LIBS})
+# 链接依赖库到 ax_tts_api 库
+target_link_libraries(ax_tts_api PRIVATE ${MSP_LIBS})
 
 # 设置包含目录
-target_include_directories(ax_asr_api
+target_include_directories(ax_tts_api
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/api>
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
@@ -72,19 +72,19 @@ target_include_directories(ax_asr_api
         ${MSP_INC_DIR}
 )
 
-# main executable - 依赖于 ax_asr_api 库
+# main executable - 依赖于 ax_tts_api 库
 add_executable(main main.cpp)
 target_include_directories(main PRIVATE src)
-target_link_libraries(main PUBLIC ax_asr_api PRIVATE ${MSP_LIBS})
+target_link_libraries(main PUBLIC ax_tts_api PRIVATE ${MSP_LIBS})
 
 # 单元测试
 if (BUILD_TESTS)
     add_subdirectory(tests)
 endif()
 
-# 安装 ax_asr_api 库和头文件
-install(TARGETS ax_asr_api
-        EXPORT ax_asr_api-targets
+# 安装 ax_tts_api 库和头文件
+install(TARGETS ax_tts_api
+        EXPORT ax_tts_api-targets
         ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
         LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
@@ -92,7 +92,7 @@ install(TARGETS ax_asr_api
 )
 
 # 安装头文件（额外的安装方式，确保头文件被安装）
-install(FILES src/api/ax_asr_api.h
+install(FILES src/api/ax_tts_api.h
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
 
@@ -102,15 +102,15 @@ install(TARGETS main
 )
 
 # 创建配置文件供 find_package 使用
-install(EXPORT ax_asr_api-targets
-        FILE ax_asr_api-config.cmake
+install(EXPORT ax_tts_api-targets
+        FILE ax_tts_api-config.cmake
         NAMESPACE ax::
-        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/ax_asr_api
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/ax_tts_api
 )
 
 # 可选：为开发人员提供导出目标
-export(EXPORT ax_asr_api-targets
-       FILE ${CMAKE_CURRENT_BINARY_DIR}/ax_asr_api-targets.cmake
+export(EXPORT ax_tts_api-targets
+       FILE ${CMAKE_CURRENT_BINARY_DIR}/ax_tts_api-targets.cmake
        NAMESPACE ax::
 )
 

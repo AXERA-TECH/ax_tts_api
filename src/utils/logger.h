@@ -30,9 +30,9 @@ typedef enum {
 } AX_TTS_LOG_LEVEL_E;
 
 #ifdef __LOG_LEVEL_DEBUG__
-    static AX_TTS_LOG_LEVEL_E ax_asr_log_level = AX_TTS_LOG_DEBUG;
+    static AX_TTS_LOG_LEVEL_E ax_tts_log_level = AX_TTS_LOG_DEBUG;
 #else
-    static AX_TTS_LOG_LEVEL_E ax_asr_log_level = AX_TTS_LOG_INFO;
+    static AX_TTS_LOG_LEVEL_E ax_tts_log_level = AX_TTS_LOG_INFO;
 #endif
 
 #if 1
@@ -56,13 +56,13 @@ typedef enum {
 #endif
 
 #define ALOGE(fmt, ...) printf(MACRO_RED "[E][%32s][%4d]: " fmt MACRO_END "\n", __FUNCTION__, __LINE__, ##__VA_ARGS__)
-#define ALOGW(fmt, ...) if (ax_asr_log_level >= AX_TTS_LOG_WARN) \
+#define ALOGW(fmt, ...) if (ax_tts_log_level >= AX_TTS_LOG_WARN) \
     printf(MACRO_YELLOW "[W][%32s][%4d]: " fmt MACRO_END "\n", __FUNCTION__, __LINE__, ##__VA_ARGS__)
-#define ALOGI(fmt, ...) if (ax_asr_log_level >= AX_TTS_LOG_INFO) \
+#define ALOGI(fmt, ...) if (ax_tts_log_level >= AX_TTS_LOG_INFO) \
     printf(MACRO_GREEN "[I][%32s][%4d]: " fmt MACRO_END "\n", __FUNCTION__, __LINE__, ##__VA_ARGS__)
-#define ALOGD(fmt, ...) if (ax_asr_log_level >= AX_TTS_LOG_DEBUG) \
+#define ALOGD(fmt, ...) if (ax_tts_log_level >= AX_TTS_LOG_DEBUG) \
     printf(MACRO_WHITE "[D][%32s][%4d]: " fmt MACRO_END "\n", __FUNCTION__, __LINE__, ##__VA_ARGS__)
-#define ALOGN(fmt, ...) if (ax_asr_log_level >= AX_TTS_LOG_NOTICE) \
+#define ALOGN(fmt, ...) if (ax_tts_log_level >= AX_TTS_LOG_NOTICE) \
     printf(MACRO_PURPLE "[N][%32s][%4d]: " fmt MACRO_END "\n", __FUNCTION__, __LINE__, ##__VA_ARGS__)
 
 #ifdef __cplusplus

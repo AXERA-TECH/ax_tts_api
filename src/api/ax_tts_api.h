@@ -67,7 +67,7 @@ typedef void* AX_TTS_HANDLE;
  *   AX_TTS_HANDLE handle = AX_TTS_Init(AX_KOKORO, "./models-ax650/");
  *   
  */
-AX_TTS_API AX_TTS_HANDLE AX_TTS_Init(AX_TTS_TYPE_E _type, const char* model_path);
+AX_TTS_API AX_TTS_HANDLE AX_TTS_Init(AX_TTS_TYPE_E tts_type, const char* model_path);
 
 /**
  * @brief Deinitialize and release TTS resources

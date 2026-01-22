@@ -1,6 +1,9 @@
 ax650n_bsp_sdk
 ax620e_bsp_sdk
 build/
+build_ax650
+build_ax630c
+build_ax620q
 install
 .vscode
 models-*
