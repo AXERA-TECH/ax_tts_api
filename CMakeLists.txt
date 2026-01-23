@@ -37,15 +37,14 @@ include_directories(${MSP_INC_DIR})
 link_directories(${MSP_LIB_DIR})
 
 # 第三方库
-# include_directories(third_party/kaldi-native-fbank/include)
-# link_directories(third_party/kaldi-native-fbank/lib/${CMAKE_SYSTEM_PROCESSOR})
-# list(APPEND KALDI_LIBS kaldi-native-fbank-core kissfft-float)
+include(cmake/third_party.cmake)
 
 # Project sources
 aux_source_directory(src SRC)
 aux_source_directory(src/utils SRC)
 aux_source_directory(src/ax_model_runner SRC)
-aux_source_directory(src/asr SRC)
+aux_source_directory(src/tts SRC)
+aux_source_directory(src/utils/g2p SRC)
 
 # libax_tts_api.so - 共享库
 add_library(ax_tts_api SHARED src/api/ax_tts_api.cpp ${SRC})
@@ -58,7 +57,7 @@ set_target_properties(ax_tts_api PROPERTIES
 )
 
 # 链接依赖库到 ax_tts_api 库
-target_link_libraries(ax_tts_api PRIVATE ${MSP_LIBS})
+target_link_libraries(ax_tts_api PRIVATE ${MSP_LIBS} ${ESPEAK_LIBS})
 
 # 设置包含目录
 target_include_directories(ax_tts_api

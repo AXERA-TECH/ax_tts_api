@@ -7,20 +7,18 @@ set(CMAKE_CXX_STANDARD 17)
 file(GLOB TEST_SOURCES "*.cpp")
 
 # 额外依赖
-# list(APPEND EXTRA_SRCS
-#     ${CMAKE_SOURCE_DIR}/src/utils/AudioLoader.cpp
-#     ${CMAKE_SOURCE_DIR}/src/utils/resample.cpp)
+list(APPEND EXTRA_SRCS
+    ${CMAKE_SOURCE_DIR}/src/utils/g2p/EspeakG2P.cpp)
 
 # 为每个测试文件创建可执行程序
 foreach(test_file ${TEST_SOURCES})
     get_filename_component(test_name ${test_file} NAME_WE)
     
-    # add_executable(${test_name} ${test_file} ${EXTRA_SRCS})
-    add_executable(${test_name} ${test_file})
+    add_executable(${test_name} ${test_file} ${EXTRA_SRCS})
     
     # 链接父目录生成的库
     target_include_directories(${test_name} PRIVATE ${CMAKE_SOURCE_DIR}/src)
-    target_link_libraries(${test_name} PUBLIC ax_tts_api PRIVATE ${MSP_LIBS})
+    target_link_libraries(${test_name} PUBLIC ax_tts_api PRIVATE ${MSP_LIBS} ${ESPEAK_LIBS})
 
     # 安装到CMAKE_INSTALL_BINDIR
     install(TARGETS ${test_name}
