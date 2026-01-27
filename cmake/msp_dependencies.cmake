@@ -4,7 +4,7 @@ if(NOT BSP_MSP_DIR)
         add_definitions(-DCHIP_AX650)
         set(BSP_MSP_DIR ${CMAKE_SOURCE_DIR}/ax650n_bsp_sdk/msp/out)
         list(APPEND MSP_LIBS
-            ax_dmadim)
+            libax_dmadim.a)
     elseif(CHIP_AX630C)
         add_definitions(-DCHIP_AX630C)
         set(BSP_MSP_DIR ${CMAKE_SOURCE_DIR}/ax620e_bsp_sdk/msp/out/arm64_glibc)
@@ -15,9 +15,10 @@ if(NOT BSP_MSP_DIR)
 endif()
 message(STATUS "BSP_MSP_DIR = ${BSP_MSP_DIR}")
 list(APPEND MSP_LIBS
-            ax_sys
-            ax_engine
-            ax_interpreter)
+            libax_sys.a
+            libax_engine.a
+            libax_interpreter.a
+)
 
 # check bsp exist
 if(NOT EXISTS ${BSP_MSP_DIR})

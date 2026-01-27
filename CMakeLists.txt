@@ -57,7 +57,7 @@ set_target_properties(ax_tts_api PROPERTIES
 )
 
 # 链接依赖库到 ax_tts_api 库
-target_link_libraries(ax_tts_api PRIVATE ${MSP_LIBS} ${ESPEAK_LIBS})
+target_link_libraries(ax_tts_api PRIVATE ${MSP_LIBS} ${ESPEAK_LIBS} ${ORT_LIBS} dl)
 
 # 设置包含目录
 target_include_directories(ax_tts_api

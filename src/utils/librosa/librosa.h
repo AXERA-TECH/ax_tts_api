@@ -26,6 +26,8 @@
 #include <complex>
 #include <iostream>
 #include <cmath>
+#include <algorithm>
+#include <cstdio>
 
 ///
 /// \brief c++ implemention of librosa
@@ -76,9 +78,13 @@ static Vectorf pad(Vectorf &x, int left, int right, const std::string &mode, flo
   return x_paded;
 }
 
-static Matrixcf stft(Vectorf &x, int n_fft, int n_hop, const std::string &win, bool center, const std::string &mode){
+static Matrixcf stft(Vectorf &x, int n_fft, int n_hop, const std::string &win, bool center, const std::string &mode, bool normalized){
   // hanning
   Vectorf window = 0.5*(1.f-(Vectorf::LinSpaced(n_fft, 0.f, static_cast<float>(n_fft-1))*2.f*M_PI/n_fft).array().cos());
+  float norm_ratio = 1.0f;
+  if (normalized) {
+    norm_ratio = 1.0f / sqrtf(n_fft);
+  }
 
   int pad_len = center ? n_fft / 2 : 0;
   Vectorf x_paded = pad(x, pad_len, pad_len, mode, 0.f);
@@ -92,7 +98,175 @@ static Matrixcf stft(Vectorf &x, int n_fft, int n_hop, const std::string &win, b
     Vectorf x_frame = window.array()*x_paded.segment(i*n_hop, n_fft).array();
     X.row(i) = fft.fwd(x_frame);
   }
-  return X.leftCols(n_f);
+  auto res = X.leftCols(n_f);
+  res = res * norm_ratio;
+  return res.transpose();
+}
+
+static Vectorf window_sumsquared(const Vectorf& window, int n_fft, int n_hop, int n_frames, bool center) {
+    Vectorf norm_win = window / window.maxCoeff();
+    Vectorf win_sq = norm_win.cwiseProduct(norm_win);
+    
+    int n;
+    if (center) {
+        n = n_fft + n_hop * (n_frames - 1) + n_fft;
+    } else {
+        n = n_fft + n_hop * (n_frames - 1);
+    }
+    
+    Vectorf x = Vectorf::Zero(n);
+    
+    for (int i = 0; i < n_frames; i++) {
+        int sample;
+        if (center) {
+            sample = i * n_hop + n_fft / 2;
+        } else {
+            sample = i * n_hop;
+        }
+        
+        int remaining = n - sample;
+        int length = std::min(n_fft, remaining);
+        
+        if (length > 0) {
+            x.segment(sample, length) += win_sq.head(length);
+        }
+    }
+    
+    // 避免除以零
+    for (int i = 0; i < n; i++) {
+        if (x(i) < 1e-8) {
+            x(i) = 1.0f;
+        }
+    }
+    
+    return x;
+}
+
+static Vectorf istft(Matrixcf &stft_matrix, int n_fft, int n_hop, 
+                     const std::string &win, bool center, 
+                     const std::string &mode, bool normalized) {
+    // hanning window (与STFT保持一致)
+    Vectorf window = 0.5*(1.f-(Vectorf::LinSpaced(n_fft, 0.f, static_cast<float>(n_fft-1))*2.f*M_PI/n_fft).array().cos());
+    
+    // 归一化因子 (与STFT保持一致)
+    float norm_ratio = 1.0f;
+    if (normalized) {
+        norm_ratio = sqrtf(n_fft);  // sqrt(win_length) = sqrt(n_fft)
+    }
+    
+    int n_frames = stft_matrix.cols();
+    int n_freq = stft_matrix.rows();  // n_fft/2 + 1
+    
+    // 计算预期信号长度
+    int expected_signal_len;
+    int pad_len = 0;
+    
+    if (center) {
+        pad_len = n_fft / 2;
+        expected_signal_len = n_fft + n_hop * (n_frames - 1);
+    } else {
+        expected_signal_len = n_fft + n_hop * (n_frames - 1);
+    }
+    
+    // 初始化输出信号（包含填充）
+    Vectorf y = Vectorf::Zero(expected_signal_len + (center ? 2 * pad_len : 0));
+    
+    Eigen::FFT<float> fft;
+    
+    // 处理每一帧
+    for (int i = 0; i < n_frames; i++) {
+        // 计算起始位置
+        int start_pos = i * n_hop + (center ? pad_len : 0);
+        
+        // 构建完整频谱（n_fft点）
+        Vectorcf full_spectrum(n_fft);
+        
+        // 1. 复制正频率部分（0 ~ n_freq-1）
+        full_spectrum.head(n_freq) = stft_matrix.col(i);
+        
+        // 2. 构建负频率部分（共轭对称）
+        // 注意：索引从1开始，因为DC分量不参与对称
+        int start_idx = 1;
+        int length;
+        
+        if (n_fft % 2 == 0) {
+            // 偶数长度：n_freq = n_fft/2 + 1
+            // 需要复制的是索引1到n_freq-2（共n_freq-2个点）
+            length = n_freq - 2;
+        } else {
+            // 奇数长度：n_freq = (n_fft+1)/2
+            // 需要复制的是索引1到n_freq-1（共n_freq-1个点）
+            length = n_freq - 1;
+        }
+        
+        // 将正频率的共轭放到负频率位置
+        for (int k = 0; k < length; k++) {
+            int pos_idx = start_idx + k;
+            int neg_idx = n_fft - pos_idx;
+            full_spectrum(neg_idx) = std::conj(stft_matrix(pos_idx, i));
+        }
+        
+        // 3. 对于偶数长度，Nyquist频率需要特殊处理
+        if (n_fft % 2 == 0) {
+            // Nyquist频率（索引n_freq-1）应该是实数
+            full_spectrum(n_fft/2) = std::complex<float>(
+                std::real(stft_matrix(n_freq-1, i)), 0.0f);
+        }
+        
+        // 执行逆FFT（结果应该是实数）
+        Vectorcf ifft_complex = fft.inv(full_spectrum);
+        
+        // 取实部（虚部理论上应该接近0）
+        Vectorf iffted = ifft_complex.real();
+        
+        // 乘以窗函数（与STFT中的操作对应）
+        Vectorf windowed = iffted.cwiseProduct(window);
+        
+        // 重叠相加到输出信号
+        if (start_pos + n_fft <= y.size()) {
+            y.segment(start_pos, n_fft) += windowed;
+        } else {
+            // 处理边界情况
+            int valid_length = y.size() - start_pos;
+            y.segment(start_pos, valid_length) += windowed.head(valid_length);
+        }
+    }
+    
+    // 计算窗函数平方和用于归一化
+    Vectorf win_sum = Vectorf::Zero(y.size());
+    
+    for (int i = 0; i < n_frames; i++) {
+        int start_pos = i * n_hop + (center ? pad_len : 0);
+        int end_pos = std::min(start_pos + n_fft, static_cast<int>(y.size()));
+        int length = end_pos - start_pos;
+        
+        if (length > 0) {
+            win_sum.segment(start_pos, length) += 
+                window.head(length).cwiseProduct(window.head(length));
+        }
+    }
+    
+    // 避免除以零
+    for (int i = 0; i < win_sum.size(); i++) {
+        if (std::abs(win_sum(i)) < 1e-10f) {
+            win_sum(i) = 1.0f;
+        }
+    }
+    
+    // 窗函数归一化（Overlap-Add的核心）
+    y = y.cwiseQuotient(win_sum);
+    
+    // 应用与STFT一致的归一化因子
+    if (normalized) {
+        y = y * norm_ratio;
+    }
+    
+    // 移除中心化填充
+    if (center) {
+        return y.segment(pad_len, expected_signal_len - n_fft);
+    }
+    
+    return y.head(expected_signal_len);
 }
 
 static Matrixf spectrogram(Matrixcf &X, float power = 1.f){
@@ -147,7 +321,7 @@ static Matrixf melspectrogram(Vectorf &x, int sr, int n_fft, int n_hop,
                         const std::string &win, bool center,
                         const std::string &mode, float power,
                         int n_mels, int fmin, int fmax){
-  Matrixcf X = stft(x, n_fft, n_hop, win, center, mode);
+  Matrixcf X = stft(x, n_fft, n_hop, win, center, mode, false);
   Matrixf mel_basis = melfilter(sr, n_fft, n_mels, fmin, fmax);
   Matrixf sp = spectrogram(X, power);
   Matrixf mel = mel_basis*sp.transpose();
@@ -191,15 +365,32 @@ public:
   static std::vector<std::vector<std::complex<float>>> stft(std::vector<float> &x,
                                                             int n_fft, int n_hop,
                                                             const std::string &win, bool center,
-                                                            const std::string &mode){
+                                                            const std::string &mode, bool normalized){
     Vectorf map_x = Eigen::Map<Vectorf>(x.data(), x.size());
-    Matrixcf X = internal::stft(map_x, n_fft, n_hop, win, center, mode);
+    Matrixcf X = internal::stft(map_x, n_fft, n_hop, win, center, mode, normalized);
     std::vector<std::vector<std::complex<float>>> X_vector(X.rows(), std::vector<std::complex<float>>(X.cols(), 0));
     for (int i = 0; i < X.rows(); ++i){
       auto &row = X_vector[i];
       Eigen::Map<Vectorcf>(row.data(), row.size()) = X.row(i);
     }
     return X_vector;
+  }
+
+  static std::vector<float> istft(std::vector<std::vector<std::complex<float>>> &x,
+                                                            int n_fft, int n_hop,
+                                                            const std::string &win, bool center,
+                                                            const std::string &mode, bool normalized){
+    Matrixcf map_x(x.size(), x[0].size());
+    map_x.setZero();
+    for (int i = 0; i < map_x.rows(); i++) {
+      map_x.row(i) = Eigen::Map<Vectorcf>(x[i].data(), x[i].size());
+      // for (int j = 0; j < map_x.cols(); j++) {
+      //   map_x(i, j) = x[i][j];
+      // }
+    }
+    Vectorf X = internal::istft(map_x, n_fft, n_hop, win, center, mode, normalized);
+    std::vector<float> res(X.data(), X.data() + X.size());
+    return res;
   }
 
   /// \brief      compute mel spectrogram similar with librosa.feature.melspectrogram

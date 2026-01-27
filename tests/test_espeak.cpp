@@ -65,7 +65,7 @@ static void test_zh(utils::ZhEspeakG2P& g2p) {
 
 int main(int argc, char** argv) {
     cmdline::parser cmd;
-    cmd.add<std::string>("language", 'l', "Language, in ISO-639 format", false, "");
+    cmd.add<std::string>("language", 'l', "Language, in ISO-639 format", false, "en");
     cmd.add<std::string>("text", 't', "Input text", false, "");
     cmd.parse_check(argc, argv);
     

@@ -16,7 +16,7 @@
 class TTSInterface {
 public:
     virtual ~TTSInterface() {}
-    virtual bool init(AX_TTS_TYPE_E asr_type, const std::string& model_path) = 0;
+    virtual bool init(AX_TTS_TYPE_E tts_type, AX_TTS_INIT_CONFIG* init_config) = 0;
     virtual void uninit(void) = 0;
-    virtual bool run(const std::string& text, AX_TTS_CONFIG* config, AX_TTS_AUDIO** audio) = 0;
+    virtual bool run(const std::string& text, AX_TTS_RUN_CONFIG* run_config, AX_TTS_AUDIO** audio) = 0;
 };

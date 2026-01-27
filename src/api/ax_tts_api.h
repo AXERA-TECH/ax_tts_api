@@ -16,18 +16,29 @@ extern "C" {
 
 #define AX_TTS_API __attribute__((visibility("default")))
 
+#define AX_TTS_MAX_STR_LEN  32
+
 // Supported TTS models
 enum AX_TTS_TYPE_E {
     AX_KOKORO = 0,
 };
 
-// TTS config
+// TTS Init config
 typedef struct {
-    int speed;
+    int max_seq_len;
+    char model_path[AX_TTS_MAX_STR_LEN];
+    char espeak_data_path[AX_TTS_MAX_STR_LEN];
+} AX_TTS_INIT_CONFIG;
+
+
+// TTS Run config
+typedef struct {
+    float speed;
+    float fade_out;
     int sample_rate;
-    char voice[32];
-    char language[32];
-} AX_TTS_CONFIG;
+    char voice[AX_TTS_MAX_STR_LEN];
+    char language[AX_TTS_MAX_STR_LEN];
+} AX_TTS_RUN_CONFIG;
 
 // Speech audio
 typedef struct {
@@ -67,7 +78,7 @@ typedef void* AX_TTS_HANDLE;
  *   AX_TTS_HANDLE handle = AX_TTS_Init(AX_KOKORO, "./models-ax650/");
  *   
  */
-AX_TTS_API AX_TTS_HANDLE AX_TTS_Init(AX_TTS_TYPE_E tts_type, const char* model_path);
+AX_TTS_API AX_TTS_HANDLE AX_TTS_Init(AX_TTS_TYPE_E tts_type, AX_TTS_INIT_CONFIG* init_config);
 
 /**
  * @brief Deinitialize and release TTS resources
@@ -97,7 +108,7 @@ AX_TTS_API void AX_TTS_Uninit(AX_TTS_HANDLE handle);
  */
 AX_TTS_API int AX_TTS_Run(AX_TTS_HANDLE handle, 
                    const char* text, 
-                   AX_TTS_CONFIG* tts_config,
+                   AX_TTS_RUN_CONFIG* run_config,
                    AX_TTS_AUDIO** audio);                
 
 #ifdef __cplusplus

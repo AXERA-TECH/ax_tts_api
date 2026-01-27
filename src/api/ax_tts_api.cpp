@@ -37,13 +37,18 @@ extern "C" {
  *   AX_TTS_HANDLE handle = AX_TTS_Init(AX_KOKORO, "./models-ax650/");
  *   
  */
-AX_TTS_API AX_TTS_HANDLE AX_ASR_Init(AX_TTS_TYPE_E tts_type, const char* model_path) {
-    if (!model_path) {
+AX_TTS_API AX_TTS_HANDLE AX_TTS_Init(AX_TTS_TYPE_E tts_type, AX_TTS_INIT_CONFIG* init_config) {
+    if (!init_config) {
+        ALOGE("init_config is NULL!");
+        return NULL;
+    }
+    
+    if (!init_config->model_path) {
         ALOGE("model_path is NULL!");
         return NULL;
     }
 
-    TTSInterface* handle = TTSFactory::create(tts_type, std::string(model_path));
+    TTSInterface* handle = TTSFactory::create(tts_type, init_config);
     if (!handle) {
         ALOGE("Create tts failed!");
         return NULL;
@@ -86,12 +91,23 @@ AX_TTS_API void AX_TTS_Uninit(AX_TTS_HANDLE handle) {
  */
 AX_TTS_API int AX_TTS_Run(AX_TTS_HANDLE handle, 
                    const char* text, 
-                   AX_TTS_CONFIG* tts_config,
+                   AX_TTS_RUN_CONFIG* run_config,
                    AX_TTS_AUDIO** audio) {
     if (!handle) {
         ALOGE("handle is NULL!");
         return -1;
-    }    
+    }
+
+    if (!run_config) {
+        ALOGE("run_config is NULL!");
+        return -1;
+    }
+
+    auto interface = static_cast<TTSInterface*>(handle);
+    if (!interface->run(std::string(text), run_config, audio)) {
+        ALOGE("Run tts failed!");
+        return -1;
+    }
 
     return 0;
 }

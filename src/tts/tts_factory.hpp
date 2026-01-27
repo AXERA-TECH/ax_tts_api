@@ -13,20 +13,17 @@
 #include "tts/tts_interface.hpp"
 #include "api/ax_tts_api.h"
 #include "utils/logger.h"
+#include "tts/kokoro.hpp"
 
 class TTSFactory {
 public:
-    static TTSInterface* create(AX_TTS_TYPE_E tts_type, const std::string& model_path) {
+    static TTSInterface* create(AX_TTS_TYPE_E tts_type, AX_TTS_INIT_CONFIG* tts_init_config) {
         TTSInterface* interface = nullptr;
         
-        std::string spec_model_path;
-        spec_model_path.reserve(64);
-
         switch (tts_type)
         {
         case AX_KOKORO: {
-            // interface = new Kokoro();
-            // spec_model_path = model_path + "/kokoro";
+            interface = new Kokoro();
             break;
         }
         default:
@@ -34,7 +31,7 @@ public:
             return nullptr;
         }
 
-        if (!interface->init(tts_type, spec_model_path)) {
+        if (!interface->init(tts_type, tts_init_config)) {
             ALOGE("Init tts failed!");
             delete interface;
             return nullptr;
