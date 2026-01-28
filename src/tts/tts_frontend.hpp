@@ -57,13 +57,18 @@ public:
         ALOGD("phonemes: %s", phonemes.c_str());
 
         std::vector<int> tokens;
+        tokens.reserve(input_text.length() * 2);
+        tokens.emplace_back(0);
+
         std::vector<std::string> chars = utils::split_utf8(phonemes);
         
         for (const auto& c : chars) {
             if (vocab.count(c)) {
-                tokens.push_back(vocab.at(c));
+                tokens.emplace_back(vocab.at(c));
             }
         }
+
+        tokens.emplace_back(0);
         return tokens;
     }
 

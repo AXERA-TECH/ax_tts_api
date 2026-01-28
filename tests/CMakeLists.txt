@@ -8,7 +8,9 @@ file(GLOB TEST_SOURCES "*.cpp")
 
 # 额外依赖
 list(APPEND EXTRA_SRCS
-    ${CMAKE_SOURCE_DIR}/src/utils/g2p/EspeakG2P.cpp)
+    ${CMAKE_SOURCE_DIR}/src/utils/g2p/EspeakG2P.cpp
+    ${CMAKE_SOURCE_DIR}/src/utils/string_utils.cpp
+)
 
 # 为每个测试文件创建可执行程序
 foreach(test_file ${TEST_SOURCES})
@@ -18,7 +20,7 @@ foreach(test_file ${TEST_SOURCES})
     
     # 链接父目录生成的库
     target_include_directories(${test_name} PRIVATE ${CMAKE_SOURCE_DIR}/src)
-    target_link_libraries(${test_name} PUBLIC ax_tts_api)
+    target_link_libraries(${test_name} PUBLIC ax_tts_api PRIVATE ${ESPEAK_LIBS})
 
     # 安装到CMAKE_INSTALL_BINDIR
     install(TARGETS ${test_name}

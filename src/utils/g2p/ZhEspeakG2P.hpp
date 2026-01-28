@@ -11,6 +11,7 @@
 
 #include "utils/g2p/g2p.hpp"
 #include "utils/g2p/EspeakG2P.hpp"
+#include "utils/logger.h"
 
 namespace utils {
 
@@ -29,6 +30,7 @@ public:
     std::string run(const std::string& input_text, int& err) {
         std::string result = espeak_.run(input_text, get_language(), err);
         if (err != 0) {
+            ALOGE("espeak run failed! err=%d", err);
             return std::string("");
         }
         return result;

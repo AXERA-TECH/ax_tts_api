@@ -10,6 +10,9 @@
 #include "utils/string_utils.hpp"
 #include "utils/logger.h"
 
+#include <sstream>
+#include <algorithm>
+
 namespace utils {
 
 std::vector<std::string> split_utf8(const std::string& utf8_text) {
@@ -29,6 +32,45 @@ std::vector<std::string> split_utf8(const std::string& utf8_text) {
         i += char_len;
     }
     return chars;
+}
+
+// https://github.com/bootphon/phonemizer/blob/master/phonemizer/utils.py#L35
+std::vector<std::string> str2list(const std::string& text, char delimiter) {
+    std::vector<std::string> tokens;
+    std::string token;
+    std::istringstream tokenStream(text);
+    
+    // getline extracts characters from tokenStream and stores them into token 
+    // until the delimiter character is found.
+    while (std::getline(tokenStream, token, delimiter)) {
+        if (!token.empty())
+            tokens.push_back(token);
+    }
+
+    if (tokens.empty()) {
+        return std::vector<std::string>{text};
+    }
+
+    return tokens;
+}
+
+void replace_inplace(std::string& str, const std::string& from, const std::string& to) {
+    if(from.empty())
+        return;
+        
+    size_t start_pos = 0;
+    while((start_pos = str.find(from, start_pos)) != std::string::npos) {
+        str.replace(start_pos, from.length(), to);
+        start_pos += to.length(); // In case 'to' contains 'from', like replacing 'x' with 'yx'
+    }
+}
+
+std::string strip(const std::string& s) {
+    auto begin = 
+        std::find_if_not(s.begin(), s.end(), ::isspace);
+    auto end = 
+        std::find_if_not(s.rbegin(), s.rend(), ::isspace).base();
+    return (begin < end) ? std::string(begin, end) : "";
 }
 
 }

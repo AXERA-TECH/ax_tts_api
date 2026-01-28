@@ -65,7 +65,7 @@ static void test_en(AX_TTS_HANDLE handle) {
     printf("================================\n");
     printf("test_en:\n");
     printf("input text: %s\n", input_text.c_str());
-    printf("output duration: %.2f\n", audio_file.getNumSamplesPerChannel() * 1.0f / run_config.sample_rate);
+    printf("output duration: %.2f seconds\n", audio_file.getNumSamplesPerChannel() * 1.0f / run_config.sample_rate);
     printf("output file: %s\n", output_wav.c_str());
     printf("\n");
 }

@@ -7,21 +7,25 @@
  * written consent of Axera Semiconductor (Ningbo) Co., Ltd.
  *
  **************************************************************************************************/
-#pragma once
+#include <stdio.h>
 
-#include <vector>
-#include <string>
+#include "utils/g2p/Punctuator.hpp"
 
-namespace utils {
+static utils::Punctuator punc;
 
-std::vector<std::string> split_utf8(const std::string& utf8_text);
+void test_en() {
+    std::string text("Hello, World!");
+    auto line_marks = punc.run(text);
 
-// https://github.com/bootphon/phonemizer/blob/master/phonemizer/utils.py#L35
-std::vector<std::string> str2list(const std::string& text, char delimiter='\n');
+    printf("test_en:\n");
+    printf("Input text: %s\n", text.c_str());
+    for (int i = 0; i < line_marks.size(); i++) {
+        printf("Line[%d]: text: %s \t mark: %s\n", i, line_marks[i].first.c_str(), line_marks[i].second.c_str());
+    }
+}
 
-void replace_inplace(std::string& str, const std::string& from, const std::string& to);
-
-std::string strip(const std::string& s);
-
+int main(int argc, char** argv) {
+    test_en();
     
+    return 0;
 }

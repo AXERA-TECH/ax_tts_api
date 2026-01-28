@@ -177,6 +177,11 @@ public:
         if (err != 0) {
             return false;
         }
+        printf("[");
+        for (auto i : input_ids) {
+            printf("%d ", i);
+        }
+        printf("]\n");
 
         // get voice
         auto ref_s = load_voice_embedding_(input_ids.size());
@@ -349,7 +354,8 @@ private:
 
         int actual_content_frames;
         int total_frames;
-        if (!inference_single_chunk_(input_ids, ref_s, actual_len, speed, audio, actual_content_frames, total_frames)) {
+        if (!inference_single_chunk_(input_ids, 
+            ref_s, actual_len, speed, audio, actual_content_frames, total_frames)) {
             return false;
         }
 
