@@ -25,9 +25,11 @@ public:
         {
         case AX_KOKORO: {
             interface = new Kokoro();
+            sprintf(tts_init_config->model_path, "%s/kokoro/", tts_init_config->model_path);
             break;
         }
         case AX_MELOTTS: {
+            sprintf(tts_init_config->model_path, "%s/melotts/", tts_init_config->model_path);
             interface = new MeloTTS();
             break;
         }

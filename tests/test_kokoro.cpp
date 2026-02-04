@@ -82,7 +82,7 @@ int main(int argc, char** argv) {
 
     AX_TTS_INIT_CONFIG init_config;
     init_config.max_seq_len = 96;
-    snprintf(init_config.model_path, AX_TTS_MAX_STR_LEN, "%s", "models-ax650/kokoro");
+    snprintf(init_config.model_path, AX_TTS_MAX_STR_LEN, "%s", "models-ax650");
     snprintf(init_config.espeak_data_path, AX_TTS_MAX_STR_LEN, "%s", "espeak-ng-data");
 
     AX_TTS_HANDLE handle = AX_TTS_Init(AX_KOKORO, &init_config);

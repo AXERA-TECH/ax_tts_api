@@ -35,7 +35,7 @@ static void test_en(AX_TTS_HANDLE handle) {
     AX_TTS_RUN_CONFIG run_config;
     run_config.fade_out = 0.3f;
     run_config.speed = 1.0f;
-    run_config.sample_rate = 24000;
+    run_config.sample_rate = 44100;
     snprintf(run_config.language, AX_TTS_MAX_STR_LEN, "%s", "en");
     snprintf(run_config.voice, AX_TTS_MAX_STR_LEN, "%s", "af_heart");
 
@@ -82,7 +82,7 @@ int main(int argc, char** argv) {
 
     AX_TTS_INIT_CONFIG init_config;
     init_config.max_seq_len = 128;
-    snprintf(init_config.model_path, AX_TTS_MAX_STR_LEN, "%s", "models-ax650/melotts");
+    snprintf(init_config.model_path, AX_TTS_MAX_STR_LEN, "%s", "models-ax650");
 
     AX_TTS_HANDLE handle = AX_TTS_Init(AX_MELOTTS, &init_config);
     if (!handle) {
