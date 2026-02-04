@@ -21,6 +21,7 @@ extern "C" {
 // Supported TTS models
 enum AX_TTS_TYPE_E {
     AX_KOKORO = 0,
+    AX_MELOTTS
 };
 
 // TTS Init config

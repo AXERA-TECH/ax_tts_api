@@ -14,6 +14,7 @@
 #include "api/ax_tts_api.h"
 #include "utils/logger.h"
 #include "tts/kokoro.hpp"
+#include "tts/melotts.hpp"
 
 class TTSFactory {
 public:
@@ -24,6 +25,10 @@ public:
         {
         case AX_KOKORO: {
             interface = new Kokoro();
+            break;
+        }
+        case AX_MELOTTS: {
+            interface = new MeloTTS();
             break;
         }
         default:
