@@ -17,7 +17,7 @@
 #include "openai_err.hpp"
 
 #define DEFAULT_PORT    8080
-#define ASR_ENDPOINT    "/v1/audio/speech"
+#define TTS_ENDPOINT    "/v1/audio/speech"
 
 /* OpenAI-Compatible server
    Following API docs from: https://platform.openai.com/docs/api-reference/audio/createSpeech
@@ -106,12 +106,13 @@ private:
      * request: Content-Type: multipart/form-data
      * {
      *      "input": "The text to generate audio for."
-     *      "language": Supports zh, en, ja, etc.
+     *      "instructions": We use instructions for language choice for compatibilty. Supports zh, en, ja, etc.
      *      "model": Supports kokoro and melotts
      *      "speed": The speed of the generated audio. Select a value from 0.25 to 4.0. 1.0 is the default.
+     *      "response_format": The format to audio in. Supported formats are mp3, wav. Default to mp3.
      * }
     */
-    bool check_request_(const httplib::Request& req, httplib::Response& res);
+    bool check_request_(const httplib::Request& req, httplib::Response& res, nlohmann::json& json_data);
 
 private:
     std::map<std::string, AX_TTS_HANDLE> handles_;

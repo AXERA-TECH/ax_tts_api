@@ -23,6 +23,9 @@
 #include "utils/logger.h"
 #include "openai_err.hpp"
 #include "utils/nlohmann/json.hpp"
+#include "utils/AudioFile.h"
+
+namespace fs = std::filesystem;
 
 static std::map<std::string, AX_TTS_TYPE_E> MODEL_MAP = {
         {"kokoro", AX_KOKORO},
@@ -66,6 +69,24 @@ int get_interface_ip(const char *interface_name, char *ip_address_buffer) {
     return 0;
 }
 
+// Function to read a binary file into a vector of chars
+std::vector<char> read_binary_file(const std::string& filepath) {
+    std::ifstream file(filepath, std::ios::binary | std::ios::ate);
+    if (!file) {
+        throw std::runtime_error("Cannot open file: " + filepath);
+    }
+
+    std::streamsize size = file.tellg();
+    file.seekg(0, std::ios::beg);
+
+    std::vector<char> buffer(size);
+    if (!file.read(buffer.data(), size)) {
+        throw std::runtime_error("Error reading file: " + filepath);
+    }
+
+    return buffer;
+}
+
 bool TTSServer::init(const std::string& model_path) {
     model_path_ = model_path;
 
@@ -75,8 +96,6 @@ bool TTSServer::init(const std::string& model_path) {
 }
 
 void TTSServer::start(int port) {
-    this->setup_routes_();
-
     char ip_buffer[INET_ADDRSTRLEN]; // INET_ADDRSTRLEN is max length for IPv4 addr string
     const char* interface = "eth0";
 
@@ -97,38 +116,37 @@ void TTSServer::stop() {
 
 // ================ PRIVATE ================
 void TTSServer::setup_routes_() {
-    this->srv_.Post(ASR_ENDPOINT, [this](const httplib::Request& req, httplib::Response& res) {
+    this->srv_.Post(TTS_ENDPOINT, [this](const httplib::Request& req, httplib::Response& res) {
         // 1. 设置CORS头
         set_CORS_headers_(res);
 
         // 2. 检查参数
-        if (!this->check_request_(req, res)) {
+        nlohmann::json json_data;
+        if (!this->check_request_(req, res, json_data)) {
             ALOGE("Check request param failed!");
             return;
         }
 
         // 3. 获取参数
-        std::string input_text = req.form.get_field("input");
-        std::string model = req.form.get_field("model");
-        std::string language = req.form.get_field("language");
+        std::string input_text = json_data["input"];
+        std::string model = json_data["model"];
+        std::string language = json_data["instructions"];
         float speed = 1.0f;
-        if (req.form.has_field("speed"))
-            speed = std::stof(req.form.get_field("speed"));
+        if (json_data.contains("speed"))
+            speed = json_data["speed"];
 
         // 4. 加载tts模型, 不会重复加载
         auto handle = this->load_tts_(model);
-
-        // Save to disk
-        // std::string filename = std::filesystem::path(file.filename).filename().string();
-        // std::string tmppath = "/tmp/" + filename;
-        // std::ofstream ofs(tmppath, std::ios::binary);
-        // ofs << file.content;
 
         // 5. 运行模型
         AX_TTS_RUN_CONFIG run_config;
         run_config.fade_out = 0.3f;
         run_config.speed = speed;
-        run_config.sample_rate = 44100;
+        if (model == "kokoro")
+            run_config.sample_rate = 24000;
+        else
+            run_config.sample_rate = 44100;
+
         snprintf(run_config.language, AX_TTS_MAX_STR_LEN, "%s", language.c_str());
         snprintf(run_config.voice, AX_TTS_MAX_STR_LEN, "%s", "af_heart");
 
@@ -145,13 +163,28 @@ void TTSServer::setup_routes_() {
             return;
         }
 
-        // Send file
-        // nlohmann::json response;
-        // response["text"] = std::string(text);
-        // free(text);
+        std::string tmp_filename = std::string(std::tmpnam(nullptr)) + ".wav";
+        AudioFile<float> audio_file;
+        std::vector<std::vector<float> > audio_samples{std::vector<float>(audio->data, audio->data + audio->num_samples)};
+        audio_file.setAudioBuffer(audio_samples);
+        audio_file.setSampleRate(run_config.sample_rate);
+        if (!audio_file.save(tmp_filename)) {
+            ALOGE("Save audio file failed!\n");
+            ErrorResponse openai_res(OPENAI_ERR_INTERNAL_SERVER_ERROR, "Save audio file failed!", "");
+            openai_res.to_res(res);
+            free(audio);
+            return;
+        }
 
-        // res.status = 200;
-        // res.set_content(response.dump(), "application/json");
+        ALOGI("Saved tts result to %s, samplerate=%d, num_samples=%d", tmp_filename.c_str(), run_config.sample_rate, audio->num_samples);
+
+        free(audio);
+
+        std::vector<char> buffer = read_binary_file(tmp_filename);
+
+        // Set the content with the correct MIME type for WAV files
+        res.set_content(buffer.data(), buffer.size(), "audio/wav"); //
+        res.status = 200;
         return;
     });
 }
@@ -170,12 +203,13 @@ AX_TTS_HANDLE TTSServer::load_tts_(const std::string& model_name) {
         ALOGI("Initializing %s ...", model_name.c_str());
 
         AX_TTS_INIT_CONFIG init_config;
-        if (AX_MELOTTS == tts_type) {
+        if (AX_KOKORO == tts_type) {
             init_config.max_seq_len = 96;
-            snprintf(init_config.model_path, AX_TTS_MAX_STR_LEN, "%s", "models-ax650/kokoro");
+            snprintf(init_config.model_path, AX_TTS_MAX_STR_LEN, "%s", model_path_.c_str());
             snprintf(init_config.espeak_data_path, AX_TTS_MAX_STR_LEN, "%s", "espeak-ng-data");
-        } else if (AX_KOKORO == tts_type) {
+        } else if (AX_MELOTTS == tts_type) {
             init_config.max_seq_len = 128;
+            snprintf(init_config.model_path, AX_TTS_MAX_STR_LEN, "%s", model_path_.c_str());
         }
         
         AX_TTS_HANDLE new_handle = AX_TTS_Init(tts_type, &init_config);
@@ -196,59 +230,68 @@ void TTSServer::set_CORS_headers_(httplib::Response& res) {
                     "Content-Type, X-Array-Name, X-Array-Description, X-Array-Size");
 }
 
-bool TTSServer::check_request_(const httplib::Request& req, httplib::Response& res) {
+bool TTSServer::check_request_(const httplib::Request& req, httplib::Response& res, nlohmann::json& json_data) {
     // 1. 检查Content-Type
     if (!req.has_header("Content-Type") ||
-        req.get_header_value("Content-Type").find("multipart/form-data") == std::string::npos) {
-            ALOGE("Content-Type must be multipart/form-data.");
-            ErrorResponse openai_res(OPENAI_ERR_BAD_REQUEST, "Content-Type must be multipart/form-data.", "Content-Type");
+        req.get_header_value("Content-Type").find("application/json") == std::string::npos) {
+            ALOGE("Content-Type must be application/json. Current is %s", req.get_header_value("Content-Type").c_str());
+            ErrorResponse openai_res(OPENAI_ERR_BAD_REQUEST, "Content-Type must be application/json.", "Content-Type");
             openai_res.to_res(res);
             return false;
     }
 
-    // 2. 检查model
-    {
-        if (!req.form.has_field("model")) {
-            ALOGE("\"model\" field must be provided.");
-            ErrorResponse openai_res(OPENAI_ERR_BAD_REQUEST, "\"model\" field must be provided.", "model");
-            openai_res.to_res(res);
-            return false;
+    try {
+        json_data = nlohmann::json::parse(req.body);
+
+        // 2. 检查model
+        {
+            if (!json_data.contains("model")) {
+                ALOGE("\"model\" field must be provided.");
+                ErrorResponse openai_res(OPENAI_ERR_BAD_REQUEST, "\"model\" field must be provided.", "model");
+                openai_res.to_res(res);
+                return false;
+            }
+
+            std::string model = json_data["model"];
+            if (MODEL_MAP.find(model) == MODEL_MAP.end()) {
+                ALOGE("%s not found in server.", model.c_str());
+                ErrorResponse openai_res(OPENAI_ERR_NOT_FOUND, model + "not found in server.", "model");
+                openai_res.to_res(res);
+                return false;
+            }
+
+            // 获取模型
+            auto handle = this->load_tts_(model);
+            if (!handle) {
+                ALOGE("Load asr failed!");
+                ErrorResponse openai_res(OPENAI_ERR_NOT_FOUND, "Load tts failed.", "model");
+                openai_res.to_res(res);
+                return false;
+            }
+        }
+        
+        // 3. 检查language
+        {
+            if (!json_data.contains("instructions")) {
+                ErrorResponse openai_res(OPENAI_ERR_BAD_REQUEST, "\"instructions\" field must be provided.", "instructions");
+                openai_res.to_res(res);
+                return false;
+            }
         }
 
-        std::string model = req.form.get_field("model");
-        if (MODEL_MAP.find(model) == MODEL_MAP.end()) {
-            ALOGE("%s not found in server.", model.c_str());
-            ErrorResponse openai_res(OPENAI_ERR_NOT_FOUND, model + "not found in server.", "model");
-            openai_res.to_res(res);
-            return false;
+        // 4. 检查input
+        {
+            if (!json_data.contains("input")) {
+                ErrorResponse openai_res(OPENAI_ERR_BAD_REQUEST, "\"input\" field must be provided.", "input");
+                openai_res.to_res(res);
+                return false;
+            }
         }
-
-        // 获取模型
-        auto handle = this->load_tts_(model);
-        if (!handle) {
-            ALOGE("Load asr failed!");
-            ErrorResponse openai_res(OPENAI_ERR_NOT_FOUND, "Load tts failed.", "model");
-            openai_res.to_res(res);
-            return false;
-        }
-    }
-    
-    // 3. 检查language
-    {
-        if (!req.form.has_field("language")) {
-            ErrorResponse openai_res(OPENAI_ERR_BAD_REQUEST, "\"language\" field must be provided.", "language");
-            openai_res.to_res(res);
-            return false;
-        }
-    }
-
-    // 4. 检查input
-    {
-        if (!req.form.has_field("input")) {
-            ErrorResponse openai_res(OPENAI_ERR_BAD_REQUEST, "\"input\" field must be provided.", "input");
-            openai_res.to_res(res);
-            return false;
-        }
+    } catch (const nlohmann::json::parse_error& e) {
+        // Handle JSON parsing errors
+        ErrorResponse openai_res(OPENAI_ERR_BAD_REQUEST, std::string("Error parsing JSON: ") + std::string(e.what()), "");
+        openai_res.to_res(res);
+        return false;
     }
 
     return true;
