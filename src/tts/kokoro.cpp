@@ -173,15 +173,16 @@ public:
         }
 
         int err = 0;
-        auto input_ids = frontend_.run(text, vocab_, err);
+        std::string language(run_config->language);
+        auto input_ids = frontend_.run(text, language, vocab_, err);
         if (err != 0) {
             return false;
         }
-        printf("[");
-        for (auto i : input_ids) {
-            printf("%d ", i);
-        }
-        printf("]\n");
+        // printf("[");
+        // for (auto i : input_ids) {
+        //     printf("%d ", i);
+        // }
+        // printf("]\n");
 
         // get voice
         auto ref_s = load_voice_embedding_(input_ids.size());

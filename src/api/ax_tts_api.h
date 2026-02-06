@@ -29,6 +29,7 @@ typedef struct {
     int max_seq_len;
     char model_path[AX_TTS_MAX_STR_LEN];
     char espeak_data_path[AX_TTS_MAX_STR_LEN];
+    char language[AX_TTS_MAX_STR_LEN];
 } AX_TTS_INIT_CONFIG;
 
 
