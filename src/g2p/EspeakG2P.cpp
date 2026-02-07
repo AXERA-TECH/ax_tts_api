@@ -7,7 +7,7 @@
  * written consent of Axera Semiconductor (Ningbo) Co., Ltd.
  *
  **************************************************************************************************/
-#include "utils/g2p/EspeakG2P.hpp"
+#include "g2p/EspeakG2P.hpp"
 #include "utils/logger.h"
 
 namespace utils {

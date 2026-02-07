@@ -70,6 +70,63 @@ static void test_en(AX_TTS_HANDLE handle) {
     printf("\n");
 }
 
+static void test_zh(AX_TTS_HANDLE handle) {
+    std::string input_text("一切有为法，如梦幻泡影，如露亦如电，应作如是观。");
+
+    /*
+    * ground truth:
+
+    phonemes: i→ʨʰje↘ jou↓ wei↘ fa↓,
+    phonemes: ɻu↗ mə↘ŋxwa↘npʰau↘i↓ŋ,
+    phonemes: ɻu↗lu↘ i↘ ɻu↗tjɛ↘n,
+    phonemes: i→ŋ ʦwo↘ɻu↗ʂɨ↘kwa→n.
+    input_ids: [[  0  51 171  21 162  52  47 173  16  52  57  63 169  16  65  47  51 173
+    16  48  43 169   3  16  16 126  63 172  16  55  83 173 112  66  65  43
+    173  56  58 162  43  63 173  51 169 112   3  16  16 126  63 172  54  63
+    173  16  51 173  16 126  63 172  62  52  86 173  56   3  16  16  51 171
+    112  16  20  65  57 173 126  63 172 130 101 173  53  65  43 171  56   4
+        0]]
+    */
+    
+    AX_TTS_RUN_CONFIG run_config;
+    run_config.fade_out = 0.3f;
+    run_config.speed = 1.0f;
+    run_config.sample_rate = 24000;
+    snprintf(run_config.language, AX_TTS_MAX_STR_LEN, "%s", "zh");
+    snprintf(run_config.voice, AX_TTS_MAX_STR_LEN, "%s", "zf_xiaoxiao");
+
+    AX_TTS_AUDIO* audio = NULL;
+    int ret = AX_TTS_Run(handle, 
+                   input_text.c_str(), 
+                   &run_config,
+                   &audio); 
+    if (ret != 0) {
+        ALOGE("AX_TTS_Run failed!");
+        free(audio);
+        return;
+    }
+
+    std::string output_wav("test_zh.wav");
+    AudioFile<float> audio_file;
+    std::vector<std::vector<float> > audio_samples{std::vector<float>(audio->data, audio->data + audio->num_samples)};
+    audio_file.setAudioBuffer(audio_samples);
+    audio_file.setSampleRate(run_config.sample_rate);
+    if (!audio_file.save(output_wav)) {
+        ALOGE("Save audio file failed!\n");
+        return;
+    }
+
+    free(audio);
+
+    printf("================================\n");
+    printf("test_zh:\n");
+    printf("input text: %s\n", input_text.c_str());
+    printf("output duration: %.2f seconds\n", audio_file.getNumSamplesPerChannel() * 1.0f / run_config.sample_rate);
+    printf("output file: %s\n", output_wav.c_str());
+    printf("\n");
+}
+
+
 int main(int argc, char** argv) {
     cmdline::parser cmd;
     cmd.add<std::string>("language", 'l', "Language, in ISO-639 format", false, "en");
@@ -94,6 +151,7 @@ int main(int argc, char** argv) {
     ALOGI("AX_TTS_Init success");
 
     test_en(handle);
+    test_zh(handle);
 
     if (!input_text.empty() && !language.empty()) {
         test_input_text(handle, input_text, language);

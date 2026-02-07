@@ -163,7 +163,31 @@ void TTSServer::setup_routes_() {
             return;
         }
 
-        std::string tmp_filename = std::string(std::tmpnam(nullptr)) + ".wav";
+        // Template must be a character array, not a string constant, last 6 chars must be XXXXXX
+        char tmp_filename[] = "/tmp/tts_server_outputXXXXXX"; 
+        int fd;
+
+        // Create the unique file and get the file descriptor
+        fd = mkstemp(tmp_filename);
+
+        if (fd == -1) {
+            ALOGE("mkstemp failed");
+            ErrorResponse openai_res(OPENAI_ERR_INTERNAL_SERVER_ERROR, "mkstemp failed!", "");
+            openai_res.to_res(res);
+            return;
+        }
+
+        // template now holds the unique filename (e.g., "/tmp/mytempfilea1B2c3")
+        ALOGD("Created temporary file: %s", tmp_filename);
+
+        // You can now write to the file using the file descriptor, 
+        // for example, with write() or by using fdopen() to get a FILE* stream
+        // ... use fd ... 
+
+        // Close the file descriptor
+        close(fd);
+
+
         AudioFile<float> audio_file;
         std::vector<std::vector<float> > audio_samples{std::vector<float>(audio->data, audio->data + audio->num_samples)};
         audio_file.setAudioBuffer(audio_samples);
@@ -176,15 +200,24 @@ void TTSServer::setup_routes_() {
             return;
         }
 
-        ALOGI("Saved tts result to %s, samplerate=%d, num_samples=%d", tmp_filename.c_str(), run_config.sample_rate, audio->num_samples);
+        ALOGI("Saved tts result to %s, samplerate=%d, num_samples=%d", tmp_filename, run_config.sample_rate, audio->num_samples);
 
         free(audio);
 
         std::vector<char> buffer = read_binary_file(tmp_filename);
 
+        // Remove the file after use
+        if (unlink(tmp_filename) != 0) {
+            perror("unlink failed");
+            ErrorResponse openai_res(OPENAI_ERR_INTERNAL_SERVER_ERROR, "unlink failed!", "");
+            openai_res.to_res(res);
+            return;
+        }
+
         // Set the content with the correct MIME type for WAV files
         res.set_content(buffer.data(), buffer.size(), "audio/wav"); //
         res.status = 200;
+
         return;
     });
 }

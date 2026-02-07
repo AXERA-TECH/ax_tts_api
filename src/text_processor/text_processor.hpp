@@ -9,26 +9,14 @@
  **************************************************************************************************/
 #pragma once
 
-#include <memory>
-#include <map>
+#include <vector>
 #include <string>
-#include "tts/tts_interface.hpp"
 
-class Kokoro : public TTSInterface {
+class TextProcessor {
 public:
-    Kokoro();
-    
-    ~Kokoro();
-
-    bool init(AX_TTS_TYPE_E tts_type, AX_TTS_INIT_CONFIG* init_config);
-    void uninit(void);
-    bool run(const std::string& text, AX_TTS_RUN_CONFIG* run_config, AX_TTS_AUDIO** audio);
-
-private:
-    bool load_vocab_(const std::string& vocab_path);
-    
-private:
-    class Impl;
-    std::unique_ptr<Impl> impl_;
-    std::map<std::string, int> vocab_;
+    virtual ~TextProcessor() = default;
+    // Return pairs of (word, pos_tag)
+    virtual std::vector<std::pair<std::string, std::string>> cut(const std::string& text) = 0;
+    virtual std::vector<std::string> word_to_pinyin(const std::string& word) = 0;
+    virtual std::string convert_numbers(const std::string& text) = 0;
 };

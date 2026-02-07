@@ -46,9 +46,14 @@ aux_source_directory(src/utils SRC)
 aux_source_directory(src/ax_model_runner SRC)
 aux_source_directory(src/tts SRC)
 aux_source_directory(src/utils/g2p SRC)
+aux_source_directory(src/frontend SRC)
 
 # libax_tts_api.so - 共享库
 add_library(ax_tts_api SHARED src/api/ax_tts_api.cpp ${SRC})
+target_include_directories(ax_tts_api
+    src/utils/cppjieba
+    src/utils
+)
 
 # 设置库属性
 set_target_properties(ax_tts_api PROPERTIES

@@ -11,21 +11,22 @@
 
 #include <string>
 #include <vector>
-#include <memory>
-#include "api/ax_tts_api.h"
-#include "frontend/frontend_interface.hpp"
+#include <unordered_map>
+#include "utils/string_utils.hpp"
 
-class TTSInterface {
+class PinyinFinder {
 public:
-    virtual ~TTSInterface() {}
-    virtual bool init(AX_TTS_TYPE_E tts_type, AX_TTS_INIT_CONFIG* init_config) = 0;
-    virtual void uninit(void) = 0;
-    virtual bool run(const std::string& text, AX_TTS_RUN_CONFIG* run_config, AX_TTS_AUDIO** audio) = 0;
+    using UnicodeCharT = char16_t;
+    using UnicodeStr = std::u16string;
 
-    virtual void set_frontend(std::shared_ptr<TTSFrontend> frontend) {
-        frontend_ = std::move(frontend);
-    }
+    PinyinFinder();
+    ~PinyinFinder();
 
-protected:
-    std::shared_ptr<TTSFrontend> frontend_;
+    bool init(const std::string& singleCharacterDictPath, const std::string& wordsDictPath);
+
+    void find_best_pinyin(const std::string& phrasestr, std::vector<std::string>& pinyins);
+
+private:
+    std::unordered_map<UnicodeStr, std::string> word_pinyin_dict_;
+    static const int kMaxChars = 8; // 最大匹配长度，通常不需要太大
 };

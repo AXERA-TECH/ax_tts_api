@@ -14,7 +14,6 @@
 #include <numeric>
 
 #include "tts/kokoro.hpp"
-#include "tts/tts_frontend.hpp"
 #include "utils/logger.h"
 #include "utils/memory_utils.hpp"
 #include "ax_model_runner/ax_model_runner.hpp"
@@ -103,23 +102,10 @@ public:
         max_seq_len_ = init_config->max_seq_len;
 
         std::string model_path(init_config->model_path);
-        std::string vocab_path = model_path + "/vocab.txt";
         voice_path_ = model_path + "/voices/";
 
         if (!init_config->espeak_data_path) {
             ALOGE("espeak_data_path is NULL!");
-            return false;
-        }
-
-        if (!load_vocab_(vocab_path)) {
-            return false;
-        }
-
-        TTSFrontendConfig frontend_config;
-        sprintf(frontend_config.espeak_data_path, "%s", init_config->espeak_data_path);
-
-        if (!frontend_.init(frontend_config)) {
-            ALOGE("Init tts frontend failed!");
             return false;
         }
 
@@ -156,7 +142,7 @@ public:
         model4_.release();
     }
 
-    bool run(const std::string& text, AX_TTS_RUN_CONFIG* run_config, AX_TTS_AUDIO** audio) {
+    bool run(std::vector<int>& input_ids, AX_TTS_RUN_CONFIG* run_config, AX_TTS_AUDIO** audio) {
         if (!run_config->voice) {
             ALOGE("voice is not set");
             return false;
@@ -172,12 +158,6 @@ public:
             voice_name_ = voice_name;
         }
 
-        int err = 0;
-        std::string language(run_config->language);
-        auto input_ids = frontend_.run(text, language, vocab_, err);
-        if (err != 0) {
-            return false;
-        }
         // printf("[");
         // for (auto i : input_ids) {
         //     printf("%d ", i);
@@ -204,40 +184,6 @@ public:
     }
 
 private:
-    bool load_vocab_(const std::string& vocab_path) {
-        if (!utils::file_exist(vocab_path)) {
-            ALOGE("vocab path(%s) not exist!", vocab_path.c_str());
-            return false;
-        }
-
-        std::ifstream in(vocab_path);
-        if (in.is_open()) {
-            std::string line;
-            while (std::getline(in, line)) {
-                // Expected format: token<TAB>id
-                size_t tab = line.find('\t');
-                if (tab != std::string::npos) {
-                    std::string token = line.substr(0, tab);
-                    std::string id_str = line.substr(tab + 1);
-                    // Unescape token if needed (\n, \r, \t)
-                    size_t pos = 0;
-                    while((pos = token.find("\\n", pos)) != std::string::npos) { token.replace(pos, 2, "\n"); pos += 1; }
-                    pos = 0;
-                    while((pos = token.find("\\r", pos)) != std::string::npos) { token.replace(pos, 2, "\r"); pos += 1; }
-                    pos = 0;
-                    while((pos = token.find("\\t", pos)) != std::string::npos) { token.replace(pos, 2, "\t"); pos += 1; }
-                    
-                    vocab_[token] = std::stoi(id_str);
-                }
-            }
-        } else {
-            ALOGE("Failed to open vocab file %s", vocab_path.c_str());
-            return false;
-        }
-
-        return true;
-    }
-
     bool load_models_(const std::string& model_path) {
         std::string model1_path = model_path + "/kokoro_part1_96.axmodel";
         std::string model2_path = model_path + "/kokoro_part2_96.axmodel";
@@ -772,10 +718,7 @@ private:
     }
 
 private:
-    TTSFrontend frontend_;
-
     int max_seq_len_;
-    std::map<std::string, int> vocab_;
     std::string voice_path_;
     std::string voice_name_;
     std::vector<float> voice_tensor_;
@@ -799,6 +742,14 @@ Kokoro::~Kokoro() {
 }
 
 bool Kokoro::init(AX_TTS_TYPE_E tts_type, AX_TTS_INIT_CONFIG* init_config) {
+    std::string model_path(init_config->model_path);
+    std::string vocab_path = model_path + "/vocab.txt";
+
+    if (!load_vocab_(vocab_path)) {
+        ALOGE("Load vocab failed!");
+        return false;
+    }
+
     return impl_->init(tts_type, init_config);
 }
 
@@ -807,5 +758,47 @@ void Kokoro::uninit(void) {
 }
 
 bool Kokoro::run(const std::string& text, AX_TTS_RUN_CONFIG* config, AX_TTS_AUDIO** audio) {
-    return impl_->run(text, config, audio);
+    int err = 0;
+    std::string language(config->language);
+    auto input_ids = frontend_->run(text, language, vocab_, err);
+    if (err != 0) {
+        ALOGE("Run frontend failed! err=%d", err);
+        return false;
+    }
+
+    return impl_->run(input_ids, config, audio);
+}
+
+bool Kokoro::load_vocab_(const std::string& vocab_path) {
+    if (!utils::file_exist(vocab_path)) {
+        ALOGE("vocab path(%s) not exist!", vocab_path.c_str());
+        return false;
+    }
+
+    std::ifstream in(vocab_path);
+    if (in.is_open()) {
+        std::string line;
+        while (std::getline(in, line)) {
+            // Expected format: token<TAB>id
+            size_t tab = line.find('\t');
+            if (tab != std::string::npos) {
+                std::string token = line.substr(0, tab);
+                std::string id_str = line.substr(tab + 1);
+                // Unescape token if needed (\n, \r, \t)
+                size_t pos = 0;
+                while((pos = token.find("\\n", pos)) != std::string::npos) { token.replace(pos, 2, "\n"); pos += 1; }
+                pos = 0;
+                while((pos = token.find("\\r", pos)) != std::string::npos) { token.replace(pos, 2, "\r"); pos += 1; }
+                pos = 0;
+                while((pos = token.find("\\t", pos)) != std::string::npos) { token.replace(pos, 2, "\t"); pos += 1; }
+                
+                vocab_[token] = std::stoi(id_str);
+            }
+        }
+    } else {
+        ALOGE("Failed to open vocab file %s", vocab_path.c_str());
+        return false;
+    }
+
+    return true;
 }

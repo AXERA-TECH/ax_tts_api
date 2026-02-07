@@ -73,4 +73,12 @@ std::string strip(const std::string& s) {
     return (begin < end) ? std::string(begin, end) : "";
 }
 
+bool is_chinese(const std::string& str) {
+    // Simple heuristic check for CJK range in UTF-8
+    for (unsigned char c : str) {
+        if (c >= 0xE4 && c <= 0xE9) return true;
+    }
+    return false;
+}
+
 }

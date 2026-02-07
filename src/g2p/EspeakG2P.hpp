@@ -13,7 +13,7 @@
 #include <mutex>
 #include <string.h>
 #include "espeak-ng/speak_lib.h"
-#include "utils/g2p/Punctuator.hpp"
+#include "g2p/Punctuator.hpp"
 #include "utils/string_utils.hpp"
 
 namespace utils {

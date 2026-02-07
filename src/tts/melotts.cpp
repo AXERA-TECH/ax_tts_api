@@ -13,8 +13,8 @@
 #include <stdio.h>
 #include <algorithm>
 #include <numeric>
+#include <cstring>
 
-#include "tts/tts_frontend.hpp"
 #include "utils/logger.h"
 #include "utils/memory_utils.hpp"
 #include "ax_model_runner/ax_model_runner.hpp"

@@ -9,23 +9,23 @@
  **************************************************************************************************/
 #pragma once
 
-#include <string>
-#include <vector>
-#include <memory>
-#include "api/ax_tts_api.h"
 #include "frontend/frontend_interface.hpp"
 
-class TTSInterface {
+/*
+ * Backend for different languages:
+ * English: eSpeak
+ * Chinese: Jieba
+ * Others: eSpeak
+*/
+class KokoroFrontend : public TTSFrontend {
 public:
-    virtual ~TTSInterface() {}
-    virtual bool init(AX_TTS_TYPE_E tts_type, AX_TTS_INIT_CONFIG* init_config) = 0;
-    virtual void uninit(void) = 0;
-    virtual bool run(const std::string& text, AX_TTS_RUN_CONFIG* run_config, AX_TTS_AUDIO** audio) = 0;
+    KokoroFrontend();
+    ~KokoroFrontend();
 
-    virtual void set_frontend(std::shared_ptr<TTSFrontend> frontend) {
-        frontend_ = std::move(frontend);
-    }
+    bool init(AX_TTS_INIT_CONFIG* config);
+    std::vector<int> run(const std::string& input_text, const std::string& language, const std::map<std::string, int>& vocab, int& err);
 
-protected:
-    std::shared_ptr<TTSFrontend> frontend_;
+private:
+    class Impl;
+    std::unique_ptr<Impl> impl_;
 };

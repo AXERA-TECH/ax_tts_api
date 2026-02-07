@@ -9,25 +9,22 @@
  **************************************************************************************************/
 #pragma once
 
-#include "utils/g2p/g2p.hpp"
-#include "utils/g2p/EspeakG2P.hpp"
+#include "g2p/g2p.hpp"
+#include "g2p/EspeakG2P.hpp"
 #include "utils/logger.h"
 
 namespace utils {
 
-class EnEspeakG2P : public G2P {
+// Other languages of espeak could be found here: https://espeak.sourceforge.net/languages.html
+class LatinEspeakG2P : public G2P {
 public:
-    EnEspeakG2P(const char* espeak_data_path = "./espeak-ng-data", bool british = false):
+    LatinEspeakG2P(const char* espeak_data_path = "./espeak-ng-data", const std::string& language = "en-us"):
         espeak_(espeak_data_path),
-        british_(british) {
-            if (british) {
-                language_ = "en-gb";
-            } else {
-                language_ = "en-us";
-            }
+        language_(language) {
+            
     }
 
-    ~EnEspeakG2P() = default;
+    ~LatinEspeakG2P() = default;
     
     std::string get_language() const override { 
         return language_; 

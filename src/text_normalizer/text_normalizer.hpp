@@ -10,22 +10,24 @@
 #pragma once
 
 #include <string>
-#include <vector>
 #include <memory>
-#include "api/ax_tts_api.h"
-#include "frontend/frontend_interface.hpp"
+#include "text_processor/text_processor.hpp"
 
-class TTSInterface {
+namespace utils {
+
+class TextNormalizer {
 public:
-    virtual ~TTSInterface() {}
-    virtual bool init(AX_TTS_TYPE_E tts_type, AX_TTS_INIT_CONFIG* init_config) = 0;
-    virtual void uninit(void) = 0;
-    virtual bool run(const std::string& text, AX_TTS_RUN_CONFIG* run_config, AX_TTS_AUDIO** audio) = 0;
+    TextNormalizer() = default;
+    ~TextNormalizer() = default;
 
-    virtual void set_frontend(std::shared_ptr<TTSFrontend> frontend) {
-        frontend_ = std::move(frontend);
+    std::string run(const std::string& input_text, const std::string& language);
+
+    void set_zh_processor(std::shared_ptr<TextProcessor> zh_processor) {
+        zh_processor_ = zh_processor;
     }
 
-protected:
-    std::shared_ptr<TTSFrontend> frontend_;
+private:
+    std::shared_ptr<TextProcessor> zh_processor_;
 };
+
+} // namespace utils

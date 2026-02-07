@@ -7,20 +7,23 @@
  * written consent of Axera Semiconductor (Ningbo) Co., Ltd.
  *
  **************************************************************************************************/
-#pragma once
-
-#include <string>
+#include "text_normalizer/text_normalizer.hpp"
+#include "text_processor/jieba_processor.hpp"
+#include "utils/logger.h"
 
 namespace utils {
 
-class TextNormalizer {
-public:
-    TextNormalizer() = default;
-    ~TextNormalizer() = default;
-
-    std::string run(const std::string& input_text) {
+std::string TextNormalizer::run(const std::string& input_text, const std::string& language) {
+    if (language == "zh") {
+        if (!zh_processor_) {
+            ALOGE("zh_processor is not set!");
+            return "";
+        }
+        auto processed_text = zh_processor_->convert_numbers(input_text);
+        return processed_text;
+    } else {
         return input_text;
     }
-};
+}
 
-} // namespace utils
+}

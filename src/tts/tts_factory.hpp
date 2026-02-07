@@ -15,6 +15,7 @@
 #include "utils/logger.h"
 #include "tts/kokoro.hpp"
 #include "tts/melotts.hpp"
+#include "frontend/frontend_factory.hpp"
 
 class TTSFactory {
 public:
@@ -26,6 +27,7 @@ public:
         case AX_KOKORO: {
             interface = new Kokoro();
             sprintf(tts_init_config->model_path, "%s/kokoro/", tts_init_config->model_path);
+
             break;
         }
         case AX_MELOTTS: {
@@ -37,6 +39,15 @@ public:
             ALOGE("Unknown tts_type %d", tts_type);
             return nullptr;
         }
+
+        auto frontend = FrontendFactory::create(tts_type, tts_init_config);
+        if (!frontend) {
+            ALOGE("Create frontend failed!");
+            delete interface;
+            return nullptr;
+        }
+
+        interface->set_frontend(frontend);
 
         if (!interface->init(tts_type, tts_init_config)) {
             ALOGE("Init tts failed!");
