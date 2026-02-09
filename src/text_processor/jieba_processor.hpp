@@ -15,22 +15,43 @@
 #include "text_processor/text_processor.hpp"
 #include "text_processor/PinyinFinder.h"
 #include "utils/logger.h"
+#include "utils/memory_utils.hpp"
 
 class JiebaProcessor : public TextProcessor {
 public:
-    JiebaProcessor(const std::string& dict_path, 
-                   const std::string& hmm_path, 
-                   const std::string& user_dict_path,
-                   const std::string& idf_path, 
-                   const std::string& stop_word_path,
-                   const std::string& pinyin_char_path,
-                   const std::string& pinyin_word_path) 
-        : jieba(dict_path, hmm_path, user_dict_path, idf_path, stop_word_path) 
-    {
-        finder = std::make_shared<PinyinFinder>();
-        if (!finder->init(pinyin_char_path, pinyin_word_path)) {
-            throw std::runtime_error("Failed to init PinyinFinder!");
+    JiebaProcessor() = default;
+
+    bool load_dict(const std::string& dict_path) {
+        if (!utils::file_exist(dict_path)) {
+            ALOGE("dict_path: %s not exist!", dict_path.c_str());
+            return false;
         }
+
+        std::string d = dict_path;
+        if (!d.empty() && d.back() != '/') d += "/";
+
+        std::string jieba_dict = d + "jieba.dict.utf8";
+        std::string hmm_model = d + "hmm_model.utf8";
+        std::string user_dict = d + "user.dict.utf8";
+        std::string idf_path = d + "idf.utf8";
+        std::string stop_word_path = d + "stop_words.utf8";
+        std::string pinyin_char = d + "pinyin.txt";
+        std::string pinyin_phrase = d + "pinyin_phrase.txt";
+        std::string cmu_dict = d + "cmudict-0.7b/cmudict.dict";
+
+        jieba = std::make_shared<cppjieba::Jieba>(
+            jieba_dict, hmm_model, user_dict, idf_path, stop_word_path
+        );
+
+        finder = std::make_shared<PinyinFinder>();
+        if (!finder->init(pinyin_char, pinyin_phrase)) {
+            ALOGE("Failed to init PinyinFinder!");
+            return false;
+        }
+
+        // TODO: load cmu_dict and apply eng2p
+
+        return true;
     }
 
     std::vector<std::pair<std::string, std::string>> cut(const std::string& text) override {
@@ -38,7 +59,7 @@ public:
         std::vector<std::pair<std::string, std::string>> tag_words;
         
         // Use cppjieba Tagging
-        jieba.Tag(text, tag_words);
+        jieba->Tag(text, tag_words);
         
         for (const auto& w : tag_words) {
             std::string word = w.first;
@@ -108,6 +129,6 @@ public:
     }
 
 private:
-    cppjieba::Jieba jieba;
+    std::shared_ptr<cppjieba::Jieba> jieba;
     std::shared_ptr<PinyinFinder> finder;
 };

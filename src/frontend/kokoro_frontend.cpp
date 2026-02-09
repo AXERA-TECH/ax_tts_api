@@ -16,6 +16,7 @@
 #include "g2p/EnEspeakG2P.hpp"
 #include "g2p/LatinEspeakG2P.hpp"
 #include "text_processor/jieba_processor.hpp"
+#include "g2p/ZhJiebaG2P.hpp"
 
 using namespace std;
 using namespace utils;
@@ -32,15 +33,25 @@ public:
             return false;
         }
 
+        if (strlen(config->jieba_dict_path) == 0) {
+            ALOGE("jieba_dict_path is not set in config");
+            return false;
+        }
+
         espeak_data_path_ = string(config->espeak_data_path);
 
-        // Preload g2p: English
-        g2p_backends_.insert({"en", make_shared<EnEspeakG2P>(espeak_data_path_.c_str())});
-        // jieba processor for chinese
-        zh_processor_ = make_shared<JiebaProcessor>(
-            // TODO
-        );
+        // jieba processor for Chinese
+        zh_processor_ = make_shared<JiebaProcessor>();
+        if (!zh_processor_->load_dict(string(config->jieba_dict_path))) {
+            ALOGE("Init zh_processor failed!");
+            return false;
+        }
 
+        text_normalizer_.set_zh_processor(zh_processor_);
+
+        // Preload g2p: English, Chinese
+        g2p_backends_.insert({"en", make_shared<EnEspeakG2P>(espeak_data_path_.c_str())});
+        g2p_backends_.insert({"zh", make_shared<ZhJiebaG2P>(zh_processor_)});
         return true;
     }
 
