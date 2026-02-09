@@ -14,11 +14,10 @@
 #include "g2p/g2p.hpp"
 #include "text_processor/jieba_processor.hpp"
 
-namespace utils {
 
 class ZhJiebaG2P : public G2P {
 public:
-    ZhJiebaG2P(std::shared_ptr<JiebaProcessor> processor):
+    ZhJiebaG2P(std::shared_ptr<TextProcessor> processor):
         jieba_(processor) 
     {
 
@@ -46,7 +45,5 @@ private:
     static std::string pinyin_to_ipa_convert(const std::string& pinyin);
 
 private:
-    std::shared_ptr<JiebaProcessor> jieba_;
+    std::shared_ptr<TextProcessor> jieba_;
 };
-
-} // namespace utils

@@ -13,7 +13,7 @@
 #include "g2p/EspeakG2P.hpp"
 #include "utils/logger.h"
 
-namespace utils {
+
 
 // Other languages of espeak could be found here: https://espeak.sourceforge.net/languages.html
 class LatinEspeakG2P : public G2P {
@@ -46,5 +46,3 @@ private:
     bool british_;
     std::string language_;
 };
-
-} // namespace utils

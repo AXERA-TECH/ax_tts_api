@@ -16,7 +16,7 @@
 #include "g2p/Punctuator.hpp"
 #include "utils/string_utils.hpp"
 
-namespace utils {
+
 
 typedef std::map<std::string, std::string>    E2M_Type;
 
@@ -69,7 +69,7 @@ protected:
             if (it->first.empty())
                 it = line_marks.erase(it);
             else {
-                it->first = strip(it->first);
+                it->first = utils::strip(it->first);
                 it++;
             }  
         }
@@ -86,5 +86,3 @@ protected:
         return phonemes;
     }
 };
-
-} // namespace utils

@@ -15,7 +15,6 @@
 
 #define _DEFAULT_MARKS  ";:,.!?¡¿—…\"«»“”(){}[]"
 
-namespace utils {
 
 typedef std::pair<std::string, std::string>     LineMarkPair;
 
@@ -98,5 +97,3 @@ private:
 private:
     std::string marks_;
 };
-
-} // namespace utils

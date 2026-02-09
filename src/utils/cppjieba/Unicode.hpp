@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 #include <ostream>
-#include "limonp/LocalVector.hpp"
+#include "utils/limonp/LocalVector.hpp"
 
 namespace cppjieba {
 

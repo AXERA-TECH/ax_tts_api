@@ -8,7 +8,7 @@ file(GLOB TEST_SOURCES "*.cpp")
 
 # 额外依赖
 list(APPEND EXTRA_SRCS
-    ${CMAKE_SOURCE_DIR}/src/utils/g2p/EspeakG2P.cpp
+    ${CMAKE_SOURCE_DIR}/src/g2p/EspeakG2P.cpp
     ${CMAKE_SOURCE_DIR}/src/utils/string_utils.cpp
 )
 

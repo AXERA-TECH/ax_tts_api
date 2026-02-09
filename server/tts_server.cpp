@@ -148,7 +148,10 @@ void TTSServer::setup_routes_() {
             run_config.sample_rate = 44100;
 
         snprintf(run_config.language, AX_TTS_MAX_STR_LEN, "%s", language.c_str());
-        snprintf(run_config.voice, AX_TTS_MAX_STR_LEN, "%s", "af_heart");
+        if (language == "en")
+            snprintf(run_config.voice, AX_TTS_MAX_STR_LEN, "%s", "af_heart");
+        else
+            snprintf(run_config.voice, AX_TTS_MAX_STR_LEN, "%s", "zf_xiaoxiao");
 
         AX_TTS_AUDIO* audio = NULL;
         int ret = AX_TTS_Run(handle, 
@@ -240,6 +243,7 @@ AX_TTS_HANDLE TTSServer::load_tts_(const std::string& model_name) {
             init_config.max_seq_len = 96;
             snprintf(init_config.model_path, AX_TTS_MAX_STR_LEN, "%s", model_path_.c_str());
             snprintf(init_config.espeak_data_path, AX_TTS_MAX_STR_LEN, "%s", "espeak-ng-data");
+            snprintf(init_config.jieba_dict_path, AX_TTS_MAX_STR_LEN, "%s", "dict");
         } else if (AX_MELOTTS == tts_type) {
             init_config.max_seq_len = 128;
             snprintf(init_config.model_path, AX_TTS_MAX_STR_LEN, "%s", model_path_.c_str());

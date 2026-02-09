@@ -7,11 +7,11 @@
  * written consent of Axera Semiconductor (Ningbo) Co., Ltd.
  *
  **************************************************************************************************/
-#include "utils/text_cleaner.hpp"
+#include "text_cleaner/text_cleaner.hpp"
 #include "utils/cmdline.hpp"
 #include <stdio.h>
 
-static utils::TextCleaner g_cleaner;
+static TextCleaner g_cleaner;
 
 static void test_fullwidth_to_halfwidth() {
     std::string input_text("【全角字符转半角字符。】");

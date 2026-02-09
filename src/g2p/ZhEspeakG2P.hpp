@@ -13,7 +13,6 @@
 #include "g2p/EspeakG2P.hpp"
 #include "utils/logger.h"
 
-namespace utils {
 
 class ZhEspeakG2P : public G2P {
 public:
@@ -39,5 +38,3 @@ public:
 private:
     EspeakG2P espeak_;    
 };
-
-} // namespace utils

@@ -11,12 +11,12 @@
 
 #include "utils/cmdline.hpp"
 #include "utils/logger.h"
-#include "utils/g2p/EspeakG2P.hpp"
-#include "utils/g2p/EnEspeakG2P.hpp"
-#include "utils/g2p/ZhEspeakG2P.hpp"
+#include "g2p/EspeakG2P.hpp"
+#include "g2p/EnEspeakG2P.hpp"
+#include "g2p/ZhEspeakG2P.hpp"
 
 
-static void test_input_text(utils::EspeakG2P& g2p, const std::string& input_text, const std::string& language) {
+static void test_input_text(EspeakG2P& g2p, const std::string& input_text, const std::string& language) {
     int err = 0;
     auto phonemes = g2p.run(input_text, language, err);
     if (err != 0) {
@@ -31,7 +31,7 @@ static void test_input_text(utils::EspeakG2P& g2p, const std::string& input_text
     printf("\n");
 }
 
-static void test_en(utils::EnEspeakG2P& g2p) {
+static void test_en(EnEspeakG2P& g2p) {
     int err = 0;
     std::string input_text("Hello, World!");
     auto phonemes = g2p.run(input_text, err);
@@ -47,7 +47,7 @@ static void test_en(utils::EnEspeakG2P& g2p) {
     printf("\n");
 }
 
-static void test_zh(utils::ZhEspeakG2P& g2p) {
+static void test_zh(ZhEspeakG2P& g2p) {
     int err = 0;
     std::string input_text("你好, 世界!");
     auto phonemes = g2p.run(input_text, err);
@@ -73,9 +73,9 @@ int main(int argc, char** argv) {
     auto input_text = cmd.get<std::string>("text");
     auto language = cmd.get<std::string>("language");
 
-    utils::EspeakG2P g2p;
-    utils::EnEspeakG2P eng2p;
-    utils::ZhEspeakG2P zhg2p;
+    EspeakG2P g2p;
+    EnEspeakG2P eng2p;
+    ZhEspeakG2P zhg2p;
 
     test_en(eng2p);
     test_zh(zhg2p);

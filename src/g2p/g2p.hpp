@@ -11,8 +11,6 @@
 
 #include <string>
 
-namespace utils {
-
 class G2P {
 public:
     G2P() = default;
@@ -22,5 +20,3 @@ public:
     virtual std::string get_backend() const = 0;
     virtual std::string run(const std::string& input_text, int& err) = 0;
 };
-
-} // namespace utils

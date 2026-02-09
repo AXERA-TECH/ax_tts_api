@@ -10,7 +10,6 @@
 #include "g2p/EspeakG2P.hpp"
 #include "utils/logger.h"
 
-namespace utils {
 
 thread_local int32_t EspeakG2P::instance_counter_ = 0;
 std::mutex EspeakG2P::global_espeak_mutex_;
@@ -86,5 +85,3 @@ std::string EspeakG2P::run(const std::string& input_text, const std::string& lan
     
     return phonemes;
 }
-
-} // namespace utils

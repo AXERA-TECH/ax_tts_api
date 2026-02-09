@@ -13,7 +13,6 @@
 #include <memory>
 #include "text_processor/text_processor.hpp"
 
-namespace utils {
 
 class TextNormalizer {
 public:
@@ -29,5 +28,3 @@ public:
 private:
     std::shared_ptr<TextProcessor> zh_processor_;
 };
-
-} // namespace utils

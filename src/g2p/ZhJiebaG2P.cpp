@@ -86,19 +86,18 @@ static const std::unordered_map<char, std::string> LETTER_TO_IPA = {
     {'z', "zi"}
 };
 
-namespace utils {
 
 std::string ZhJiebaG2P::retone(std::string p) {
-    p = replace_all(p, "˧˩˧", "↓");
-    p = replace_all(p, "˧˥", "↗");
-    p = replace_all(p, "˥˩", "↘");
-    p = replace_all(p, "˥", "→");
+    p = utils::replace_all(p, "˧˩˧", "↓");
+    p = utils::replace_all(p, "˧˥", "↗");
+    p = utils::replace_all(p, "˥˩", "↘");
+    p = utils::replace_all(p, "˥", "→");
     
     // ɨ handling
-    p = replace_all(p, "\u027B\u0329", "ɨ"); 
-    p = replace_all(p, "\u0279\u0329", "ɨ"); 
-    p = replace_all(p, "ɻ̩", "ɨ"); 
-    p = replace_all(p, "ɹ̩", "ɨ"); 
+    p = utils::replace_all(p, "\u027B\u0329", "ɨ"); 
+    p = utils::replace_all(p, "\u0279\u0329", "ɨ"); 
+    p = utils::replace_all(p, "ɻ̩", "ɨ"); 
+    p = utils::replace_all(p, "ɹ̩", "ɨ"); 
     
     //p = replace_all(p, "\u032F", "");
 
@@ -108,7 +107,7 @@ std::string ZhJiebaG2P::retone(std::string p) {
 ZhJiebaG2P::PinyinParts ZhJiebaG2P::parse_pinyin(const std::string& raw_pinyin) {
     PinyinParts parts;
     parts.tone = 5;
-    std::string pinyin = trim(raw_pinyin);
+    std::string pinyin = utils::trim(raw_pinyin);
     
     if (pinyin.empty()) return parts;
 
@@ -146,7 +145,7 @@ ZhJiebaG2P::PinyinParts ZhJiebaG2P::parse_pinyin(const std::string& raw_pinyin) 
         }
     }
 
-    base = replace_all(base, "v", "ü");
+    base = utils::replace_all(base, "v", "ü");
 
     // Handle y and w (standard pinyin normalization)
     if (base.rfind("yi", 0) == 0) {
@@ -213,24 +212,24 @@ ZhJiebaG2P::PinyinParts ZhJiebaG2P::parse_pinyin(const std::string& raw_pinyin) 
 
 std::string ZhJiebaG2P::map_punctuation(std::string text) {
     // Note: using u8 string literals
-    text = replace_all(text, u8"、", ", ");
-    text = replace_all(text, u8"，", ", ");
-    text = replace_all(text, u8"。", ". ");
-    text = replace_all(text, u8"．", ". ");
-    text = replace_all(text, u8"！", "! ");
-    text = replace_all(text, u8"：", ": ");
-    text = replace_all(text, u8"；", "; ");
-    text = replace_all(text, u8"？", "? ");
-    text = replace_all(text, u8"«", u8" “");
-    text = replace_all(text, u8"»", u8"” ");
-    text = replace_all(text, u8"《", u8" “");
-    text = replace_all(text, u8"》", u8"” ");
-    text = replace_all(text, u8"「", u8" “");
-    text = replace_all(text, u8"」", u8"” ");
-    text = replace_all(text, u8"【", u8" “");
-    text = replace_all(text, u8"】", u8"” ");
-    text = replace_all(text, u8"（", " (");
-    text = replace_all(text, u8"）", ") ");
+    text = utils::replace_all(text, u8"、", ", ");
+    text = utils::replace_all(text, u8"，", ", ");
+    text = utils::replace_all(text, u8"。", ". ");
+    text = utils::replace_all(text, u8"．", ". ");
+    text = utils::replace_all(text, u8"！", "! ");
+    text = utils::replace_all(text, u8"：", ": ");
+    text = utils::replace_all(text, u8"；", "; ");
+    text = utils::replace_all(text, u8"？", "? ");
+    text = utils::replace_all(text, u8"«", u8" “");
+    text = utils::replace_all(text, u8"»", u8"” ");
+    text = utils::replace_all(text, u8"《", u8" “");
+    text = utils::replace_all(text, u8"》", u8"” ");
+    text = utils::replace_all(text, u8"「", u8" “");
+    text = utils::replace_all(text, u8"」", u8"” ");
+    text = utils::replace_all(text, u8"【", u8" “");
+    text = utils::replace_all(text, u8"】", u8"” ");
+    text = utils::replace_all(text, u8"（", " (");
+    text = utils::replace_all(text, u8"）", ") ");
     
     size_t first = text.find_first_not_of(" \t\n\r");
     if (std::string::npos == first) return text;
@@ -280,7 +279,7 @@ std::string ZhJiebaG2P::pinyin_to_ipa_convert(const std::string& pinyin) {
     
     for (const auto& ph : final_phonemes) {
         std::string processed = ph;
-        processed = replace_all(processed, "0", tone_mark);
+        processed = utils::replace_all(processed, "0", tone_mark);
         ipa_segments.push_back(processed);
     }
 
@@ -288,7 +287,7 @@ std::string ZhJiebaG2P::pinyin_to_ipa_convert(const std::string& pinyin) {
         ipa_segments.push_back("ɚ"); // or proper IPA for rhoticity
     }
 
-    return join(ipa_segments, "");
+    return utils::join(ipa_segments, "");
 }
 
 std::string ZhJiebaG2P::py2ipa(const std::string& py) {
@@ -304,7 +303,8 @@ std::string ZhJiebaG2P::run(const std::string& input_text, int& err) {
     auto words = jieba_->cut(input_text);
     for (const auto& pair : words) {
         std::string w = pair.first;
-        if (is_chinese(w)) {
+        ALOGD("word: %s", w.c_str());
+        if (utils::is_chinese(w)) {
             auto pinyins = jieba_->word_to_pinyin(w);
             for (const auto& py : pinyins) {
                 result += py2ipa(py);
@@ -318,8 +318,6 @@ std::string ZhJiebaG2P::run(const std::string& input_text, int& err) {
     }
     
     // Trim trailing space if needed
-    result = trim(result);
+    result = utils::trim(result);
     return result;
-}
-
 }

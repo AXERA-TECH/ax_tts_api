@@ -10,8 +10,8 @@
 #include <set>
 #include <string>
 #include <unordered_set>
-#include "limonp/StringUtil.hpp"
-#include "limonp/Logging.hpp"
+#include "utils/limonp/StringUtil.hpp"
+#include "utils/limonp/Logging.hpp"
 #include "Unicode.hpp"
 #include "Trie.hpp"
 

@@ -3,7 +3,7 @@
 
 #include <vector>
 #include <queue>
-#include "limonp/StdExtension.hpp"
+#include "utils/limonp/StdExtension.hpp"
 #include "Unicode.hpp"
 
 namespace cppjieba {

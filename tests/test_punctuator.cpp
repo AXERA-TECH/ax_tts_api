@@ -9,9 +9,9 @@
  **************************************************************************************************/
 #include <stdio.h>
 
-#include "utils/g2p/Punctuator.hpp"
+#include "g2p/Punctuator.hpp"
 
-static utils::Punctuator punc;
+static Punctuator punc;
 
 void test_en() {
     std::string text("Hello, World!");

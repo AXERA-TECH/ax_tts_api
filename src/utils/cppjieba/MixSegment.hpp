@@ -4,7 +4,7 @@
 #include <cassert>
 #include "MPSegment.hpp"
 #include "HMMSegment.hpp"
-#include "limonp/StringUtil.hpp"
+#include "utils/limonp/StringUtil.hpp"
 #include "PosTagger.hpp"
 
 namespace cppjieba {

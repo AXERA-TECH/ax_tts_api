@@ -47,10 +47,14 @@ aux_source_directory(src/ax_model_runner SRC)
 aux_source_directory(src/tts SRC)
 aux_source_directory(src/utils/g2p SRC)
 aux_source_directory(src/frontend SRC)
+aux_source_directory(src/text_cleaner SRC)
+aux_source_directory(src/text_normalizer SRC)
+aux_source_directory(src/text_processor SRC)
+aux_source_directory(src/g2p SRC)
 
 # libax_tts_api.so - 共享库
 add_library(ax_tts_api SHARED src/api/ax_tts_api.cpp ${SRC})
-target_include_directories(ax_tts_api
+target_include_directories(ax_tts_api PRIVATE
     src/utils/cppjieba
     src/utils
 )

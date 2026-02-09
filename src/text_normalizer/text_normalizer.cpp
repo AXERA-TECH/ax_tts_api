@@ -11,7 +11,6 @@
 #include "text_processor/jieba_processor.hpp"
 #include "utils/logger.h"
 
-namespace utils {
 
 std::string TextNormalizer::run(const std::string& input_text, const std::string& language) {
     if (language == "zh") {
@@ -24,6 +23,4 @@ std::string TextNormalizer::run(const std::string& input_text, const std::string
     } else {
         return input_text;
     }
-}
-
 }

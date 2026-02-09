@@ -13,7 +13,6 @@
 #include "g2p/EspeakG2P.hpp"
 #include "utils/logger.h"
 
-namespace utils {
 
 class EnEspeakG2P : public G2P {
 public:
@@ -49,5 +48,3 @@ private:
     bool british_;
     std::string language_;
 };
-
-} // namespace utils

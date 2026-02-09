@@ -17,7 +17,6 @@
 #include <unordered_map>
 #include <cstdint>
 
-namespace utils {
 
 class TextCleaner {
 public:
@@ -183,5 +182,3 @@ private:
         return result;
     }
 };
-
-} // namespace utils

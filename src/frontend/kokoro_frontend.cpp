@@ -61,7 +61,7 @@ public:
         // 1. Clean text
         auto cleaned_text = text_cleaner_.run(input_text);
         // 2. Normalize text
-        auto normalized_text = text_normalizer_.run(cleaned_text);
+        auto normalized_text = text_normalizer_.run(cleaned_text, language);
         // 3. G2P
         auto g2p = load_g2p_(language);
         auto phonemes = g2p->run(normalized_text, err);
@@ -80,8 +80,8 @@ public:
         for (const auto& c : chars) {
             if (vocab.count(c))
                 tokens.emplace_back(vocab.at(c));
-            else
-                ALOGW("Token: %s not found in vocab.", c.c_str());
+            // else
+            //     ALOGW("Token: %s not found in vocab.", c.c_str());
         }
         return tokens;
     }
