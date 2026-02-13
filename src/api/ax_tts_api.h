@@ -33,7 +33,6 @@ typedef struct {
     char jieba_dict_path[AX_TTS_MAX_STR_LEN];
 } AX_TTS_INIT_CONFIG;
 
-
 // TTS Run config
 typedef struct {
     float speed;
