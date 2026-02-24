@@ -342,6 +342,7 @@ private:
 
         // printf("run model 1\n");
         model1_.set_inputs(model1_inputs);
+        ALOGD("Run model1");
         ret = model1_.run();
         if (0 != ret) {
             ALOGE("Run model1 failed! ret=0x%x", ret);
@@ -393,6 +394,7 @@ private:
         };
 
         model2_.set_inputs(model2_inputs);
+        ALOGD("Run model2");
         ret = model2_.run();
         if (0 != ret) {
             ALOGE("Run model2 failed! ret=0x%x", ret);
@@ -401,6 +403,7 @@ private:
         model2_.get_outputs(model2_outputs);
 
         std::vector<float> har;
+        ALOGD("Run onnx model");
         compute_har_onnx_(F0_pred_, har);
 
         std::vector<void*> model3_inputs{
@@ -411,7 +414,7 @@ private:
             (void*)har.data()
         };
 
-        // printf("run model 3\n");
+        ALOGD("Run model3");
         model3_.set_inputs(model3_inputs);
         ret = model3_.run();
         if (0 != ret) {

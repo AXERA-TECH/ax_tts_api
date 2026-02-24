@@ -20,7 +20,7 @@ foreach(test_file ${TEST_SOURCES})
     
     # 链接父目录生成的库
     target_include_directories(${test_name} PRIVATE ${CMAKE_SOURCE_DIR}/src)
-    target_link_libraries(${test_name} PUBLIC ax_tts_api PRIVATE ${ESPEAK_LIBS})
+    target_link_libraries(${test_name} PUBLIC ax_tts_api PRIVATE ${ESPEAK_LIBS} ${MSP_LIBS})
 
     # 安装到CMAKE_INSTALL_BINDIR
     install(TARGETS ${test_name}

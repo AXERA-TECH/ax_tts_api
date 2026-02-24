@@ -82,7 +82,11 @@ int main(int argc, char** argv) {
 
     AX_TTS_INIT_CONFIG init_config;
     init_config.max_seq_len = 128;
+#if defined(CHIP_AX650) || defined(CHIP_AX8850)    
     snprintf(init_config.model_path, AX_TTS_MAX_STR_LEN, "%s", "models-ax650");
+#else
+    snprintf(init_config.model_path, AX_TTS_MAX_STR_LEN, "%s", "models-ax630c");
+#endif
 
     AX_TTS_HANDLE handle = AX_TTS_Init(AX_MELOTTS, &init_config);
     if (!handle) {
