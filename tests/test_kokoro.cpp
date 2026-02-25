@@ -12,6 +12,7 @@
 #include "utils/cmdline.hpp"
 #include "utils/logger.h"
 #include "utils/AudioFile.h"
+#include "utils/timer.hpp"
 #include "api/ax_tts_api.h"
 
 static void test_input_text(AX_TTS_HANDLE handle, const std::string& input_text, const std::string& language) {
@@ -39,6 +40,10 @@ static void test_en(AX_TTS_HANDLE handle) {
     snprintf(run_config.language, AX_TTS_MAX_STR_LEN, "%s", "en");
     snprintf(run_config.voice, AX_TTS_MAX_STR_LEN, "%s", "af_heart");
 
+    Timer timer;
+
+    timer.start();
+
     AX_TTS_AUDIO* audio = NULL;
     int ret = AX_TTS_Run(handle, 
                    input_text.c_str(), 
@@ -49,6 +54,9 @@ static void test_en(AX_TTS_HANDLE handle) {
         free(audio);
         return;
     }
+
+    timer.stop();
+    float inference_time = timer.elapsed<std::chrono::seconds>();
 
     std::string output_wav("test_en.wav");
     AudioFile<float> audio_file;
@@ -62,11 +70,14 @@ static void test_en(AX_TTS_HANDLE handle) {
 
     free(audio);
 
+    float duration = audio_file.getNumSamplesPerChannel() * 1.0f / run_config.sample_rate;
+
     printf("================================\n");
     printf("test_en:\n");
     printf("input text: %s\n", input_text.c_str());
-    printf("output duration: %.2f seconds\n", audio_file.getNumSamplesPerChannel() * 1.0f / run_config.sample_rate);
+    printf("output duration: %.2f seconds\n", duration);
     printf("output file: %s\n", output_wav.c_str());
+    printf("RTF(%.2f / %.2f) = %.4f\n", inference_time, duration, inference_time / duration);
     printf("\n");
 }
 
@@ -95,6 +106,9 @@ static void test_zh(AX_TTS_HANDLE handle) {
     snprintf(run_config.language, AX_TTS_MAX_STR_LEN, "%s", "zh");
     snprintf(run_config.voice, AX_TTS_MAX_STR_LEN, "%s", "zf_xiaoxiao");
 
+    Timer timer;
+
+    timer.start();
     AX_TTS_AUDIO* audio = NULL;
     int ret = AX_TTS_Run(handle, 
                    input_text.c_str(), 
@@ -105,6 +119,9 @@ static void test_zh(AX_TTS_HANDLE handle) {
         free(audio);
         return;
     }
+
+    timer.stop();
+    float inference_time = timer.elapsed<std::chrono::seconds>();
 
     std::string output_wav("test_zh.wav");
     AudioFile<float> audio_file;
@@ -117,12 +134,14 @@ static void test_zh(AX_TTS_HANDLE handle) {
     }
 
     free(audio);
+    float duration = audio_file.getNumSamplesPerChannel() * 1.0f / run_config.sample_rate;
 
     printf("================================\n");
     printf("test_zh:\n");
     printf("input text: %s\n", input_text.c_str());
-    printf("output duration: %.2f seconds\n", audio_file.getNumSamplesPerChannel() * 1.0f / run_config.sample_rate);
+    printf("output duration: %.2f seconds\n", duration);
     printf("output file: %s\n", output_wav.c_str());
+    printf("RTF(%.2f / %.2f) = %.4f\n", inference_time, duration, inference_time / duration);
     printf("\n");
 }
 

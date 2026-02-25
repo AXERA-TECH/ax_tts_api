@@ -6,7 +6,7 @@ def get_args():
     parser.add_argument("--ip", type=str, required=True)
     parser.add_argument("--port", type=int, default=8080)
     parser.add_argument("--text", "-t", type=str, required=True)
-    parser.add_argument("--model", "-m", type=str, required=False, default="kokoro", choices=["kokoro", "melotts"])
+    parser.add_argument("--model", "-m", type=str, required=False, default="kokoro", choices=["kokoro",])
     parser.add_argument("--language", "-l", type=str, required=False, default="en", choices=["en", "zh"])
     parser.add_argument("--speed", type=float, default=1.0)
     parser.add_argument("--response_format", "-f", type=str, default="wav")
@@ -28,5 +28,8 @@ speech = client.audio.speech.create(
             instructions=args.language
         )
 
-with open(args.output + '.' + args.response_format, "wb") as f:
+audio_file = args.output + '.' + args.response_format
+with open(audio_file, "wb") as f:
     f.write(speech.content)
+
+print(f"Saved result to {audio_file}")
