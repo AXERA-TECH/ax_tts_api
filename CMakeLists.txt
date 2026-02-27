@@ -53,7 +53,7 @@ aux_source_directory(src/text_processor SRC)
 aux_source_directory(src/g2p SRC)
 
 # libax_tts_api.so - 共享库
-add_library(ax_tts_api SHARED src/api/ax_tts_api.cpp ${SRC})
+add_library(ax_tts_api STATIC src/api/ax_tts_api.cpp ${SRC})
 target_include_directories(ax_tts_api PRIVATE
     src/utils/cppjieba
     src/utils
