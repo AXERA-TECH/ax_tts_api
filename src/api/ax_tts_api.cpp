@@ -43,8 +43,8 @@ AX_TTS_API AX_TTS_HANDLE AX_TTS_Init(AX_TTS_TYPE_E tts_type, AX_TTS_INIT_CONFIG*
         return NULL;
     }
     
-    if (!init_config->model_path) {
-        ALOGE("model_path is NULL!");
+    if (init_config->model_path.empty()) {
+        ALOGE("model_path is empty!");
         return NULL;
     }
 
@@ -90,7 +90,7 @@ AX_TTS_API void AX_TTS_Uninit(AX_TTS_HANDLE handle) {
  *       by the caller using free() when no longer needed.
  */
 AX_TTS_API int AX_TTS_Run(AX_TTS_HANDLE handle, 
-                   const char* text, 
+                   const std::string& text, 
                    AX_TTS_RUN_CONFIG* run_config,
                    AX_TTS_AUDIO** audio) {
     if (!handle) {
@@ -103,8 +103,13 @@ AX_TTS_API int AX_TTS_Run(AX_TTS_HANDLE handle,
         return -1;
     }
 
+    if (text.empty()) {
+        ALOGE("text is empty!");
+        return -1;
+    }
+
     auto interface = static_cast<TTSInterface*>(handle);
-    if (!interface->run(std::string(text), run_config, audio)) {
+    if (!interface->run(text, run_config, audio)) {
         ALOGE("Run tts failed!");
         return -1;
     }

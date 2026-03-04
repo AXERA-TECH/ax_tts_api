@@ -48,14 +48,14 @@ int main(int argc, char** argv) {
     AX_TTS_INIT_CONFIG init_config;
     init_config.max_seq_len = 96;
 #if defined(CHIP_AX650) || defined(CHIP_AX8850)    
-    snprintf(init_config.model_path, AX_TTS_MAX_STR_LEN, "%s", "models-ax650");
+    init_config.model_path = "models-ax650";
 #else
-    snprintf(init_config.model_path, AX_TTS_MAX_STR_LEN, "%s", "models-ax630c");
+    init_config.model_path = "models-ax630c";
 #endif
     auto espeak_path = pick_path("AX_TTS_ESPEAK_DATA_PATH", "espeak-ng-data");
     auto jieba_path = pick_path("AX_TTS_JIEBA_DICT_PATH", "dict");
-    snprintf(init_config.espeak_data_path, AX_TTS_MAX_STR_LEN, "%s", espeak_path.c_str());
-    snprintf(init_config.jieba_dict_path, AX_TTS_MAX_STR_LEN, "%s", jieba_path.c_str());
+    init_config.espeak_data_path = espeak_path;
+    init_config.jieba_dict_path = jieba_path;
 
     AX_TTS_HANDLE handle = AX_TTS_Init(AX_KOKORO, &init_config);
     if (!handle) {
@@ -67,8 +67,8 @@ int main(int argc, char** argv) {
     run_config.fade_out = 0.3f;
     run_config.speed = 1.0f;
     run_config.sample_rate = 24000;
-    snprintf(run_config.language, AX_TTS_MAX_STR_LEN, "%s", language.c_str());
-    snprintf(run_config.voice, AX_TTS_MAX_STR_LEN, "%s", voice.c_str());
+    run_config.language = language;
+    run_config.voice = voice;
 
     AX_TTS_AUDIO* audio = NULL;
     int ret = AX_TTS_Run(handle, 

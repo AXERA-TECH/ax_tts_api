@@ -105,7 +105,7 @@ public:
         std::string model_path(init_config->model_path);
         voice_path_ = model_path + "/voices/";
 
-        if (!init_config->espeak_data_path) {
+        if (init_config->espeak_data_path.empty()) {
             ALOGE("espeak_data_path is NULL!");
             return false;
         }
@@ -144,7 +144,7 @@ public:
     }
 
     bool run(std::vector<int>& input_ids, AX_TTS_RUN_CONFIG* run_config, AX_TTS_AUDIO** audio) {
-        if (!run_config->voice) {
+        if (run_config->voice.empty()) {
             ALOGE("voice is not set");
             return false;
         }

@@ -10,6 +10,8 @@
 #ifndef _AX_TTS_API_H_
 #define _AX_TTS_API_H_
 
+#include <string>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -27,10 +29,10 @@ enum AX_TTS_TYPE_E {
 // TTS Init config
 typedef struct {
     int max_seq_len;
-    char model_path[AX_TTS_MAX_STR_LEN];
-    char espeak_data_path[AX_TTS_MAX_STR_LEN];
-    char language[AX_TTS_MAX_STR_LEN];
-    char jieba_dict_path[AX_TTS_MAX_STR_LEN];
+    std::string model_path;
+    std::string espeak_data_path;
+    std::string language;
+    std::string jieba_dict_path;
 } AX_TTS_INIT_CONFIG;
 
 // TTS Run config
@@ -38,8 +40,8 @@ typedef struct {
     float speed;
     float fade_out;
     int sample_rate;
-    char voice[AX_TTS_MAX_STR_LEN];
-    char language[AX_TTS_MAX_STR_LEN];
+    std::string voice;
+    std::string language;
 } AX_TTS_RUN_CONFIG;
 
 // Speech audio
@@ -109,7 +111,7 @@ AX_TTS_API void AX_TTS_Uninit(AX_TTS_HANDLE handle);
  *       by the caller using free() when no longer needed.
  */
 AX_TTS_API int AX_TTS_Run(AX_TTS_HANDLE handle, 
-                   const char* text, 
+                   const std::string& text, 
                    AX_TTS_RUN_CONFIG* run_config,
                    AX_TTS_AUDIO** audio);                
 

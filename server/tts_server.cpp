@@ -148,7 +148,7 @@ void TTSServer::stop() {
 // ================ PRIVATE ================
 void TTSServer::setup_routes_() {
     this->srv_.Post(TTS_ENDPOINT, [this](const httplib::Request& req, httplib::Response& res) {
-        // 1. 设置CORS头
+        // 1. 设置 CORS 头
         set_CORS_headers_(res);
 
         // 2. 检查参数
@@ -175,7 +175,7 @@ void TTSServer::setup_routes_() {
         if (json_data.contains("speed"))
             speed = json_data["speed"];
 
-        // 4. 加载tts模型, 不会重复加载
+        // 4. 加载 tts 模型，不会重复加载
         auto handle = this->load_tts_(model);
 
         // 5. 运行模型
@@ -187,15 +187,15 @@ void TTSServer::setup_routes_() {
         else
             run_config.sample_rate = 44100;
 
-        snprintf(run_config.language, AX_TTS_MAX_STR_LEN, "%s", language.c_str());
+        run_config.language = language;
         if (!voice.empty()) {
-            snprintf(run_config.voice, AX_TTS_MAX_STR_LEN, "%s", voice.c_str());
+            run_config.voice = voice;
         } else if (language == "ja") {
-            snprintf(run_config.voice, AX_TTS_MAX_STR_LEN, "%s", "jf_gongitsune");
+            run_config.voice = "jf_gongitsune";
         } else if (language == "zh") {
-            snprintf(run_config.voice, AX_TTS_MAX_STR_LEN, "%s", "zf_xiaoxiao");
+            run_config.voice = "zf_xiaoxiao";
         } else {
-            snprintf(run_config.voice, AX_TTS_MAX_STR_LEN, "%s", "af_heart");
+            run_config.voice = "af_heart";
         }
 
         AX_TTS_AUDIO* audio = NULL;
@@ -286,14 +286,14 @@ AX_TTS_HANDLE TTSServer::load_tts_(const std::string& model_name) {
         AX_TTS_INIT_CONFIG init_config;
         if (AX_KOKORO == tts_type) {
             init_config.max_seq_len = 96;
-            snprintf(init_config.model_path, AX_TTS_MAX_STR_LEN, "%s", model_path_.c_str());
+            init_config.model_path = model_path_;
             auto espeak_path = pick_path("AX_TTS_ESPEAK_DATA_PATH", "espeak-ng-data");
             auto jieba_path = pick_path("AX_TTS_JIEBA_DICT_PATH", "dict");
-            snprintf(init_config.espeak_data_path, AX_TTS_MAX_STR_LEN, "%s", espeak_path.c_str());
-            snprintf(init_config.jieba_dict_path, AX_TTS_MAX_STR_LEN, "%s", jieba_path.c_str());
+            init_config.espeak_data_path = espeak_path;
+            init_config.jieba_dict_path = jieba_path;
         } else if (AX_MELOTTS == tts_type) {
             init_config.max_seq_len = 128;
-            snprintf(init_config.model_path, AX_TTS_MAX_STR_LEN, "%s", model_path_.c_str());
+            init_config.model_path = model_path_;
         }
         
         AX_TTS_HANDLE new_handle = AX_TTS_Init(tts_type, &init_config);
@@ -315,7 +315,7 @@ void TTSServer::set_CORS_headers_(httplib::Response& res) {
 }
 
 bool TTSServer::check_request_(const httplib::Request& req, httplib::Response& res, nlohmann::json& json_data) {
-    // 1. 检查Content-Type
+    // 1. 检查 Content-Type
     if (!req.has_header("Content-Type") ||
         req.get_header_value("Content-Type").find("application/json") == std::string::npos) {
             ALOGE("Content-Type must be application/json. Current is %s", req.get_header_value("Content-Type").c_str());
@@ -327,7 +327,7 @@ bool TTSServer::check_request_(const httplib::Request& req, httplib::Response& r
     try {
         json_data = nlohmann::json::parse(req.body);
 
-        // 2. 检查model
+        // 2. 检查 model
         {
             if (!json_data.contains("model")) {
                 ALOGE("\"model\" field must be provided.");
@@ -339,7 +339,7 @@ bool TTSServer::check_request_(const httplib::Request& req, httplib::Response& r
             std::string model = json_data["model"];
             if (MODEL_MAP.find(model) == MODEL_MAP.end()) {
                 ALOGE("%s not found in server.", model.c_str());
-                ErrorResponse openai_res(OPENAI_ERR_NOT_FOUND, model + "not found in server.", "model");
+                ErrorResponse openai_res(OPENAI_ERR_NOT_FOUND, model + " not found in server.", "model");
                 openai_res.to_res(res);
                 return false;
             }
@@ -347,14 +347,14 @@ bool TTSServer::check_request_(const httplib::Request& req, httplib::Response& r
             // 获取模型
             auto handle = this->load_tts_(model);
             if (!handle) {
-                ALOGE("Load asr failed!");
+                ALOGE("Load tts failed!");
                 ErrorResponse openai_res(OPENAI_ERR_NOT_FOUND, "Load tts failed.", "model");
                 openai_res.to_res(res);
                 return false;
             }
         }
         
-        // 3. 检查language
+        // 3. 检查 language
         {
             if (!json_data.contains("instructions")) {
                 ErrorResponse openai_res(OPENAI_ERR_BAD_REQUEST, "\"instructions\" field must be provided.", "instructions");
@@ -363,7 +363,7 @@ bool TTSServer::check_request_(const httplib::Request& req, httplib::Response& r
             }
         }
 
-        // 4. 检查input
+        // 4. 检查 input
         {
             bool has_input = json_data.contains("input");
             bool has_phonemes = json_data.contains("phonemes");

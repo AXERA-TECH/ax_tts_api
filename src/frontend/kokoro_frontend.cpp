@@ -29,13 +29,13 @@ public:
     ~Impl() = default;
 
     bool init(AX_TTS_INIT_CONFIG* config) {
-        if (strlen(config->espeak_data_path) == 0) {
+        if (config->espeak_data_path.empty()) {
             ALOGE("espeak_data_path is not set in config");
             return false;
         }
 
-        espeak_data_path_ = string(config->espeak_data_path);
-        jieba_dict_path_ = string(config->jieba_dict_path);
+        espeak_data_path_ = config->espeak_data_path;
+        jieba_dict_path_ = config->jieba_dict_path;
 
         if (jieba_dict_path_.empty()) {
             ALOGW("jieba_dict_path is empty; zh will be unavailable until set.");
