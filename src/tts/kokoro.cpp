@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <algorithm>
 #include <numeric>
+#include <cmath>
 
 #include "tts/kokoro.hpp"
 #include "utils/logger.h"
@@ -165,7 +166,9 @@ public:
         // printf("]\n");
 
         // get voice
-        auto ref_s = load_voice_embedding_(input_ids.size());
+        int phoneme_len = (int)input_ids.size() - 2;
+        if (phoneme_len < 0) phoneme_len = 0;
+        auto ref_s = load_voice_embedding_(phoneme_len);
 
         std::vector<float> audio_data;
         if (!run_models_(input_ids, ref_s, run_config->speed, run_config->fade_out, run_config->sample_rate, audio_data)) {
@@ -287,6 +290,11 @@ private:
         std::vector<float>& audio
     ) {
         int actual_len = input_ids.size();
+        if (actual_len > max_seq_len_) {
+            ALOGW("Input ids length %d exceeds max_seq_len %d, truncating.", actual_len, max_seq_len_);
+            input_ids.resize(max_seq_len_);
+            actual_len = max_seq_len_;
+        }
         // 填充到固定长度
         int padding_len = max_seq_len_ - actual_len;
         if (padding_len > 0) {

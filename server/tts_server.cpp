@@ -18,6 +18,9 @@
 #include <arpa/inet.h>
 #include <filesystem>
 #include <fstream>
+#include <limits.h>
+#include <cstdlib>
+#include <cstring>
  
 #include "tts_server.hpp"
 #include "utils/logger.h"
@@ -27,10 +30,30 @@
 
 namespace fs = std::filesystem;
 
+static std::string pick_path(const char* env_var, const char* default_rel) {
+    const char* env = std::getenv(env_var);
+    if (env && env[0] != '\0') {
+        if (std::strlen(env) < AX_TTS_MAX_STR_LEN) {
+            return std::string(env);
+        }
+        ALOGW("%s is too long for AX_TTS_MAX_STR_LEN, falling back to %s", env_var, default_rel);
+    }
+    return std::string(default_rel);
+}
+
 static std::map<std::string, AX_TTS_TYPE_E> MODEL_MAP = {
         {"kokoro", AX_KOKORO},
         {"melotts", AX_MELOTTS}
     };
+
+class InlineTaskQueue final : public httplib::TaskQueue {
+public:
+    bool enqueue(std::function<void()> fn) override {
+        fn();
+        return true;
+    }
+    void shutdown() override {}
+};
 
 int get_interface_ip(const char *interface_name, char *ip_address_buffer) {
     int fd;
@@ -90,7 +113,15 @@ std::vector<char> read_binary_file(const std::string& filepath) {
 bool TTSServer::init(const std::string& model_path) {
     model_path_ = model_path;
 
+    // Run handlers in the server thread to avoid thread-unsafe TTS runtime issues
+    this->srv_.new_task_queue = [] { return new InlineTaskQueue(); };
+
     this->setup_routes_();
+    // Preload default model in main thread to avoid thread-unsafe init in request handler
+    if (!this->load_tts_("kokoro")) {
+        ALOGE("Preload kokoro failed!");
+        return false;
+    }
     ALOGI("TTSServer init success");
     return true;
 }
@@ -128,9 +159,18 @@ void TTSServer::setup_routes_() {
         }
 
         // 3. 获取参数
-        std::string input_text = json_data["input"];
+        std::string input_text;
+        if (json_data.contains("phonemes")) {
+            input_text = "__PHONEMES__:" + std::string(json_data["phonemes"]);
+        } else {
+            input_text = json_data["input"];
+        }
         std::string model = json_data["model"];
         std::string language = json_data["instructions"];
+        std::string voice;
+        if (json_data.contains("voice")) {
+            voice = json_data["voice"];
+        }
         float speed = 1.0f;
         if (json_data.contains("speed"))
             speed = json_data["speed"];
@@ -148,10 +188,15 @@ void TTSServer::setup_routes_() {
             run_config.sample_rate = 44100;
 
         snprintf(run_config.language, AX_TTS_MAX_STR_LEN, "%s", language.c_str());
-        if (language == "en")
-            snprintf(run_config.voice, AX_TTS_MAX_STR_LEN, "%s", "af_heart");
-        else
+        if (!voice.empty()) {
+            snprintf(run_config.voice, AX_TTS_MAX_STR_LEN, "%s", voice.c_str());
+        } else if (language == "ja") {
+            snprintf(run_config.voice, AX_TTS_MAX_STR_LEN, "%s", "jf_gongitsune");
+        } else if (language == "zh") {
             snprintf(run_config.voice, AX_TTS_MAX_STR_LEN, "%s", "zf_xiaoxiao");
+        } else {
+            snprintf(run_config.voice, AX_TTS_MAX_STR_LEN, "%s", "af_heart");
+        }
 
         AX_TTS_AUDIO* audio = NULL;
         int ret = AX_TTS_Run(handle, 
@@ -242,8 +287,10 @@ AX_TTS_HANDLE TTSServer::load_tts_(const std::string& model_name) {
         if (AX_KOKORO == tts_type) {
             init_config.max_seq_len = 96;
             snprintf(init_config.model_path, AX_TTS_MAX_STR_LEN, "%s", model_path_.c_str());
-            snprintf(init_config.espeak_data_path, AX_TTS_MAX_STR_LEN, "%s", "espeak-ng-data");
-            snprintf(init_config.jieba_dict_path, AX_TTS_MAX_STR_LEN, "%s", "dict");
+            auto espeak_path = pick_path("AX_TTS_ESPEAK_DATA_PATH", "espeak-ng-data");
+            auto jieba_path = pick_path("AX_TTS_JIEBA_DICT_PATH", "dict");
+            snprintf(init_config.espeak_data_path, AX_TTS_MAX_STR_LEN, "%s", espeak_path.c_str());
+            snprintf(init_config.jieba_dict_path, AX_TTS_MAX_STR_LEN, "%s", jieba_path.c_str());
         } else if (AX_MELOTTS == tts_type) {
             init_config.max_seq_len = 128;
             snprintf(init_config.model_path, AX_TTS_MAX_STR_LEN, "%s", model_path_.c_str());
@@ -318,8 +365,10 @@ bool TTSServer::check_request_(const httplib::Request& req, httplib::Response& r
 
         // 4. 检查input
         {
-            if (!json_data.contains("input")) {
-                ErrorResponse openai_res(OPENAI_ERR_BAD_REQUEST, "\"input\" field must be provided.", "input");
+            bool has_input = json_data.contains("input");
+            bool has_phonemes = json_data.contains("phonemes");
+            if (!has_input && !has_phonemes) {
+                ErrorResponse openai_res(OPENAI_ERR_BAD_REQUEST, "\"input\" or \"phonemes\" field must be provided.", "input");
                 openai_res.to_res(res);
                 return false;
             }

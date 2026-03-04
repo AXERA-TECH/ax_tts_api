@@ -8,11 +8,26 @@
  *
  **************************************************************************************************/
 #include <stdio.h>
+#include <unistd.h>
+#include <limits.h>
+#include <cstdlib>
+#include <cstring>
 
 #include "utils/cmdline.hpp"
 #include "utils/logger.h"
 #include "utils/AudioFile.h"
 #include "api/ax_tts_api.h"
+
+static std::string pick_path(const char* env_var, const char* default_rel) {
+    const char* env = std::getenv(env_var);
+    if (env && env[0] != '\0') {
+        if (std::strlen(env) < AX_TTS_MAX_STR_LEN) {
+            return std::string(env);
+        }
+        ALOGW("%s is too long for AX_TTS_MAX_STR_LEN, falling back to %s", env_var, default_rel);
+    }
+    return std::string(default_rel);
+}
 
 int main(int argc, char** argv) {
     cmdline::parser cmd;
@@ -26,7 +41,8 @@ int main(int argc, char** argv) {
     auto language = cmd.get<std::string>("language");
     auto output = cmd.get<std::string>("output");
     std::string voice;
-    if (language == "zh")   voice = "zf_xiaoxiao";
+    if (language == "ja")   voice = "jf_gongitsune";
+    else if (language == "zh")   voice = "zf_xiaoxiao";
     else    voice = "af_heart";
 
     AX_TTS_INIT_CONFIG init_config;
@@ -36,8 +52,10 @@ int main(int argc, char** argv) {
 #else
     snprintf(init_config.model_path, AX_TTS_MAX_STR_LEN, "%s", "models-ax630c");
 #endif
-    snprintf(init_config.espeak_data_path, AX_TTS_MAX_STR_LEN, "%s", "espeak-ng-data");
-    snprintf(init_config.jieba_dict_path, AX_TTS_MAX_STR_LEN, "%s", "dict");
+    auto espeak_path = pick_path("AX_TTS_ESPEAK_DATA_PATH", "espeak-ng-data");
+    auto jieba_path = pick_path("AX_TTS_JIEBA_DICT_PATH", "dict");
+    snprintf(init_config.espeak_data_path, AX_TTS_MAX_STR_LEN, "%s", espeak_path.c_str());
+    snprintf(init_config.jieba_dict_path, AX_TTS_MAX_STR_LEN, "%s", jieba_path.c_str());
 
     AX_TTS_HANDLE handle = AX_TTS_Init(AX_KOKORO, &init_config);
     if (!handle) {
