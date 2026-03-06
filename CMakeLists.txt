@@ -1,6 +1,23 @@
 cmake_minimum_required(VERSION 3.13 FATAL_ERROR)
 project(ax_tts_api)
 
+option(AX_TTS_JIEBA_USE_MMAP "Load jieba dict via mmap for lower memory usage" ON)
+if(AX_TTS_JIEBA_USE_MMAP)
+    add_definitions(-DAX_TTS_JIEBA_USE_MMAP)
+endif()
+
+option(AX_TTS_JA_ENABLE_SHORT_DOUBLE "Enable short-text doubling path for Japanese (kokoro)" OFF)
+set(AX_TTS_JA_MIN_CHUNK_TOKENS "24" CACHE STRING "Min token count before attempting JA chunk merge")
+if(NOT AX_TTS_JA_MIN_CHUNK_TOKENS MATCHES "^[0-9]+$")
+    message(FATAL_ERROR "AX_TTS_JA_MIN_CHUNK_TOKENS must be an integer")
+endif()
+if(AX_TTS_JA_ENABLE_SHORT_DOUBLE)
+    add_definitions(-DAX_TTS_JA_ENABLE_SHORT_DOUBLE=1)
+else()
+    add_definitions(-DAX_TTS_JA_ENABLE_SHORT_DOUBLE=0)
+endif()
+add_definitions(-DAX_TTS_JA_MIN_CHUNK_TOKENS=${AX_TTS_JA_MIN_CHUNK_TOKENS})
+
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED True)
 set(CMAKE_CXX_STANDARD 17)

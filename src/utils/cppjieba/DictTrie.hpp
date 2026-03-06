@@ -12,6 +12,7 @@
 #include <unordered_set>
 #include "utils/limonp/StringUtil.hpp"
 #include "utils/limonp/Logging.hpp"
+#include "utils/memory_utils.hpp"
 #include "Unicode.hpp"
 #include "Trie.hpp"
 
@@ -202,6 +203,36 @@ class DictTrie {
   }
 
   void LoadDict(const std::string& filePath) {
+#ifdef AX_TTS_JIEBA_USE_MMAP
+    {
+      MMap mm(filePath.c_str());
+      XCHECK(mm.data() != nullptr) << "mmap " << filePath << " failed.";
+      const char* data = reinterpret_cast<const char*>(mm.data());
+      size_t size = mm.size();
+      size_t start = 0;
+      std::vector<std::string> buf;
+      DictUnit node_info;
+      for (size_t i = 0; i <= size; i++) {
+        if (i == size || data[i] == '\n') {
+          size_t len = (i > start && data[i - 1] == '\r') ? (i - start - 1) : (i - start);
+          if (len > 0) {
+            std::string line(data + start, len);
+            limonp::Split(line, buf, " ");
+            XCHECK(buf.size() == DICT_COLUMN_NUM) << "split result illegal, line:" << line;
+            MakeNodeInfo(node_info,
+                  buf[0],
+                  atof(buf[1].c_str()),
+                  buf[2]);
+            static_node_infos_.push_back(node_info);
+          }
+          start = i + 1;
+        }
+      }
+      mm.close_file();
+      return;
+    }
+#endif
+
     std::ifstream ifs(filePath.c_str());
     XCHECK(ifs.is_open()) << "open " << filePath << " failed.";
     std::string line;

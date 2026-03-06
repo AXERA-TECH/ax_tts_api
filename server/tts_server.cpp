@@ -16,7 +16,6 @@
 #include <netinet/in.h>
 #include <net/if.h>
 #include <arpa/inet.h>
-#include <filesystem>
 #include <fstream>
 #include <limits.h>
 #include <cstdlib>
@@ -28,17 +27,80 @@
 #include "utils/nlohmann/json.hpp"
 #include "utils/AudioFile.h"
 
-namespace fs = std::filesystem;
-
 static std::string pick_path(const char* env_var, const char* default_rel) {
     const char* env = std::getenv(env_var);
     if (env && env[0] != '\0') {
-        if (std::strlen(env) < AX_TTS_MAX_STR_LEN) {
-            return std::string(env);
-        }
-        ALOGW("%s is too long for AX_TTS_MAX_STR_LEN, falling back to %s", env_var, default_rel);
+        return std::string(env);
     }
     return std::string(default_rel);
+}
+
+static bool path_fits_config(const std::string& p) {
+    return p.size() < AX_TTS_MAX_STR_LEN;
+}
+
+static bool is_jp_kana_only(const std::string& s) {
+    auto is_kana_or_allowed = [](uint32_t cp) {
+        // whitespace
+        if (cp == 0x20 || cp == 0x09 || cp == 0x0A || cp == 0x0D) return true;
+        // ASCII digits and punctuation (reject letters)
+        if (cp >= 0x30 && cp <= 0x39) return true;
+        if ((cp >= 0x21 && cp <= 0x2F) || (cp >= 0x3A && cp <= 0x40) ||
+            (cp >= 0x5B && cp <= 0x60) || (cp >= 0x7B && cp <= 0x7E)) return true;
+
+        // Hiragana, Katakana, extensions, halfwidth katakana
+        if ((cp >= 0x3040 && cp <= 0x309F) || (cp >= 0x30A0 && cp <= 0x30FF) ||
+            (cp >= 0x31F0 && cp <= 0x31FF) || (cp >= 0xFF65 && cp <= 0xFF9F)) return true;
+
+        // Common Japanese punctuation
+        switch (cp) {
+            case 0x3001: // 、 
+            case 0x3002: // 。
+            case 0x300C: // 「
+            case 0x300D: // 」
+            case 0x300E: // 『
+            case 0x300F: // 』
+            case 0x3010: // 【
+            case 0x3011: // 】
+            case 0x3014: // 〔
+            case 0x3015: // 〕
+            case 0x301C: // 〜
+            case 0x2026: // …
+            case 0x30FB: // ・
+            case 0x30FC: // ー
+                return true;
+            default:
+                return false;
+        }
+    };
+
+    const unsigned char* p = reinterpret_cast<const unsigned char*>(s.data());
+    size_t i = 0;
+    while (i < s.size()) {
+        uint32_t cp = 0;
+        size_t adv = 1;
+        unsigned char c = p[i];
+        if (c < 0x80) {
+            cp = c;
+            adv = 1;
+        } else if ((c & 0xE0) == 0xC0 && i + 1 < s.size()) {
+            cp = ((c & 0x1F) << 6) | (p[i + 1] & 0x3F);
+            adv = 2;
+        } else if ((c & 0xF0) == 0xE0 && i + 2 < s.size()) {
+            cp = ((c & 0x0F) << 12) | ((p[i + 1] & 0x3F) << 6) | (p[i + 2] & 0x3F);
+            adv = 3;
+        } else if ((c & 0xF8) == 0xF0 && i + 3 < s.size()) {
+            cp = ((c & 0x07) << 18) | ((p[i + 1] & 0x3F) << 12) |
+                 ((p[i + 2] & 0x3F) << 6) | (p[i + 3] & 0x3F);
+            adv = 4;
+        } else {
+            return false;
+        }
+
+        if (!is_kana_or_allowed(cp)) return false;
+        i += adv;
+    }
+    return true;
 }
 
 static std::map<std::string, AX_TTS_TYPE_E> MODEL_MAP = {
@@ -110,8 +172,12 @@ std::vector<char> read_binary_file(const std::string& filepath) {
     return buffer;
 }
 
-bool TTSServer::init(const std::string& model_path) {
+bool TTSServer::init(const std::string& model_path,
+                     const std::string& espeak_data_path,
+                     const std::string& jieba_dict_path) {
     model_path_ = model_path;
+    espeak_data_path_ = espeak_data_path;
+    jieba_dict_path_ = jieba_dict_path;
 
     // Run handlers in the server thread to avoid thread-unsafe TTS runtime issues
     this->srv_.new_task_queue = [] { return new InlineTaskQueue(); };
@@ -174,6 +240,17 @@ void TTSServer::setup_routes_() {
         float speed = 1.0f;
         if (json_data.contains("speed"))
             speed = json_data["speed"];
+
+        if (language == "ja") {
+            static const std::string kPhonemePrefix = "__PHONEMES__:";
+            if (input_text.rfind(kPhonemePrefix, 0) != 0 && !is_jp_kana_only(input_text)) {
+                ErrorResponse openai_res(OPENAI_ERR_BAD_REQUEST,
+                    "Japanese input must be kana-only (hiragana/katakana) or provide phonemes.",
+                    "input");
+                openai_res.to_res(res);
+                return;
+            }
+        }
 
         // 4. 加载tts模型, 不会重复加载
         auto handle = this->load_tts_(model);
@@ -287,8 +364,20 @@ AX_TTS_HANDLE TTSServer::load_tts_(const std::string& model_name) {
         if (AX_KOKORO == tts_type) {
             init_config.max_seq_len = 96;
             snprintf(init_config.model_path, AX_TTS_MAX_STR_LEN, "%s", model_path_.c_str());
-            auto espeak_path = pick_path("AX_TTS_ESPEAK_DATA_PATH", "espeak-ng-data");
-            auto jieba_path = pick_path("AX_TTS_JIEBA_DICT_PATH", "dict");
+
+            std::string espeak_path = espeak_data_path_.empty()
+                ? pick_path("AX_TTS_ESPEAK_DATA_PATH", "espeak-ng-data")
+                : espeak_data_path_;
+            std::string jieba_path = jieba_dict_path_.empty()
+                ? pick_path("AX_TTS_JIEBA_DICT_PATH", "dict")
+                : jieba_dict_path_;
+
+            if (!path_fits_config(espeak_path) || !path_fits_config(jieba_path) || !path_fits_config(model_path_)) {
+                ALOGE("Path too long for AX_TTS_MAX_STR_LEN. model=%s espeak=%s jieba=%s",
+                      model_path_.c_str(), espeak_path.c_str(), jieba_path.c_str());
+                return nullptr;
+            }
+
             snprintf(init_config.espeak_data_path, AX_TTS_MAX_STR_LEN, "%s", espeak_path.c_str());
             snprintf(init_config.jieba_dict_path, AX_TTS_MAX_STR_LEN, "%s", jieba_path.c_str());
         } else if (AX_MELOTTS == tts_type) {

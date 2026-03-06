@@ -67,6 +67,11 @@ export PATH=$PATH:path of gcc-arm-9.2-2019.12-x86_64-aarch64-none-linux-gnu/bin
 export PATH=$PATH:path of arm-AX620E-linux-uclibcgnueabihf/bin
 ```
 
+ - AX620Q(arm-linux-gnueabihf, glibc)
+```bash
+export PATH=$PATH:path of arm-linux-gnueabihf/bin
+```
+
 ### 获取BSP
 
 ```bash
@@ -92,6 +97,13 @@ bash download_bsp.sh
  bash build_ax620q.sh
  ```
   编译完成后的产物在install/ax620q下
+
+ - AX620Q (arm-linux-gnueabihf + glibc)
+ ```bash
+ bash build_620qp.sh
+ ```
+  编译完成后的产物在install/ax620qp下  
+  如需自定义 MSP 路径可传环境变量：`BSP_MSP_DIR=/path/to/msp/out/arm_glibc bash build_620qp.sh`
 
  - AX8850
  ```bash
@@ -171,6 +183,29 @@ pip install openai
 python test_tts_server.py --ip 10.126.33.140 --port 8080 -t "Hello, World" --output test_en
 ```
 Check python test_tts_server.py --help for help.  
+
+#### 目标设备冒烟测试（无需 ctest）
+
+在目标设备启动服务后，可在任意机器执行：
+
+```bash
+cd scripts
+./device_smoke_test.sh 10.126.33.188 8080 /tmp/tts_smoke
+```
+
+该脚本会验证：
+- 英文可用
+- 中文可用（需服务启动时带 `--jieba_dict_path`）
+- 日语假名可用
+- 日语片假名可用
+- 日语长句（自动分块）可用
+- 日语含汉字输入会被拒绝（HTTP 400）
+
+#### 重要说明
+- 日语仅支持假名（平假名/片假名）。含汉字输入会返回 400。
+- Jieba 词典默认使用 mmap 加载（编译宏 `AX_TTS_JIEBA_USE_MMAP`，默认 ON）。
+- 为提升日语长句稳定性，默认关闭日语短句 doubling（`AX_TTS_JA_ENABLE_SHORT_DOUBLE=OFF`）。
+- 日语长句分块后会尝试合并过短片段，阈值由 `AX_TTS_JA_MIN_CHUNK_TOKENS` 控制（默认 `24`）。
 
 
 ### 单元测试

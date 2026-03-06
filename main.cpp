@@ -21,10 +21,7 @@
 static std::string pick_path(const char* env_var, const char* default_rel) {
     const char* env = std::getenv(env_var);
     if (env && env[0] != '\0') {
-        if (std::strlen(env) < AX_TTS_MAX_STR_LEN) {
-            return std::string(env);
-        }
-        ALOGW("%s is too long for AX_TTS_MAX_STR_LEN, falling back to %s", env_var, default_rel);
+        return std::string(env);
     }
     return std::string(default_rel);
 }
@@ -34,6 +31,9 @@ int main(int argc, char** argv) {
     cmd.add<std::string>("language", 'l', "Language, in ISO-639 format", true, "en");
     cmd.add<std::string>("text", 't', "Input text", true, "");
     cmd.add<std::string>("output", 'o', "Output wav path", true, "");
+    cmd.add<std::string>("model_path", 0, "Model path (override default)", false, "");
+    cmd.add<std::string>("espeak_data_path", 0, "Path to espeak-ng-data directory", false, "");
+    cmd.add<std::string>("jieba_dict_path", 0, "Path to jieba dict directory", false, "");
     cmd.parse_check(argc, argv);
     
     // 0. get app args, can be removed from user's app
@@ -48,12 +48,29 @@ int main(int argc, char** argv) {
     AX_TTS_INIT_CONFIG init_config;
     init_config.max_seq_len = 96;
 #if defined(CHIP_AX650) || defined(CHIP_AX8850)    
-    snprintf(init_config.model_path, AX_TTS_MAX_STR_LEN, "%s", "models-ax650");
+    std::string model_path = "models-ax650";
 #else
-    snprintf(init_config.model_path, AX_TTS_MAX_STR_LEN, "%s", "models-ax630c");
+    std::string model_path = "models-ax630c";
 #endif
-    auto espeak_path = pick_path("AX_TTS_ESPEAK_DATA_PATH", "espeak-ng-data");
-    auto jieba_path = pick_path("AX_TTS_JIEBA_DICT_PATH", "dict");
+    if (!cmd.get<std::string>("model_path").empty()) {
+        model_path = cmd.get<std::string>("model_path");
+    }
+    if (model_path.size() >= AX_TTS_MAX_STR_LEN) {
+        ALOGE("model_path too long for AX_TTS_MAX_STR_LEN");
+        return -1;
+    }
+    snprintf(init_config.model_path, AX_TTS_MAX_STR_LEN, "%s", model_path.c_str());
+
+    std::string espeak_path = cmd.get<std::string>("espeak_data_path");
+    if (espeak_path.empty()) espeak_path = pick_path("AX_TTS_ESPEAK_DATA_PATH", "espeak-ng-data");
+    std::string jieba_path = cmd.get<std::string>("jieba_dict_path");
+    if (jieba_path.empty()) jieba_path = pick_path("AX_TTS_JIEBA_DICT_PATH", "dict");
+
+    if (espeak_path.size() >= AX_TTS_MAX_STR_LEN || jieba_path.size() >= AX_TTS_MAX_STR_LEN) {
+        ALOGE("espeak/jieba path too long for AX_TTS_MAX_STR_LEN");
+        return -1;
+    }
+
     snprintf(init_config.espeak_data_path, AX_TTS_MAX_STR_LEN, "%s", espeak_path.c_str());
     snprintf(init_config.jieba_dict_path, AX_TTS_MAX_STR_LEN, "%s", jieba_path.c_str());
 
