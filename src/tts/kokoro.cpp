@@ -35,6 +35,14 @@
 #define DEFAULT_FADE_OUT    0.05f
 #define DEFAULT_PAUSE   0.05f
 
+#ifndef AX_TTS_JA_ENABLE_SHORT_DOUBLE
+#define AX_TTS_JA_ENABLE_SHORT_DOUBLE 0
+#endif
+
+#ifndef AX_TTS_JA_MIN_CHUNK_TOKENS
+#define AX_TTS_JA_MIN_CHUNK_TOKENS 24
+#endif
+
 
 using namespace std;
 
@@ -98,6 +106,10 @@ static void append_pause(std::vector<float>& audio, int sample_rate, float pause
     if (pause_samples > 0) {
         audio.insert(audio.end(), pause_samples, 0.0f);
     }
+}
+
+static bool is_ja_language(const std::string& language) {
+    return (language == "ja" || language.rfind("ja-", 0) == 0 || language.rfind("ja_", 0) == 0);
 }
 
 static bool is_split_char(const std::string& c, const std::string& language, bool weak) {
@@ -218,6 +230,71 @@ static std::vector<std::string> split_text_to_fit(const std::shared_ptr<TTSFront
     return {trimmed};
 }
 
+static int token_size_for_text(const std::shared_ptr<TTSFrontend>& frontend,
+                               const std::string& text,
+                               const std::string& language,
+                               const std::map<std::string, int>& vocab) {
+    int err = 0;
+    auto ids = frontend->run(text, language, vocab, err);
+    if (err != 0) return -1;
+    return static_cast<int>(ids.size());
+}
+
+static std::vector<std::string> merge_short_chunks_for_ja(const std::shared_ptr<TTSFrontend>& frontend,
+                                                          const std::vector<std::string>& chunks,
+                                                          const std::string& language,
+                                                          const std::map<std::string, int>& vocab,
+                                                          int max_len) {
+    if (!is_ja_language(language) || chunks.size() <= 1) {
+        return chunks;
+    }
+
+    const int min_tokens = std::max(8, AX_TTS_JA_MIN_CHUNK_TOKENS);
+    std::vector<std::string> merged;
+    std::string cur = chunks[0];
+    int cur_len = token_size_for_text(frontend, cur, language, vocab);
+    if (cur_len <= 0) cur_len = max_len;
+
+    for (size_t i = 1; i < chunks.size(); ++i) {
+        const std::string& nxt = chunks[i];
+        int nxt_len = token_size_for_text(frontend, nxt, language, vocab);
+        if (nxt_len <= 0) nxt_len = max_len;
+
+        bool merged_ok = false;
+        if (cur_len < min_tokens) {
+            std::string joined = cur + nxt;
+            int joined_len = token_size_for_text(frontend, joined, language, vocab);
+            if (joined_len > 0 && joined_len <= max_len) {
+                cur = std::move(joined);
+                cur_len = joined_len;
+                merged_ok = true;
+            }
+        }
+
+        if (!merged_ok) {
+            merged.emplace_back(std::move(cur));
+            cur = nxt;
+            cur_len = nxt_len;
+        }
+    }
+    merged.emplace_back(std::move(cur));
+
+    if (merged.size() >= 2) {
+        const size_t tail_idx = merged.size() - 1;
+        int tail_len = token_size_for_text(frontend, merged[tail_idx], language, vocab);
+        if (tail_len > 0 && tail_len < min_tokens) {
+            std::string joined = merged[tail_idx - 1] + merged[tail_idx];
+            int joined_len = token_size_for_text(frontend, joined, language, vocab);
+            if (joined_len > 0 && joined_len <= max_len) {
+                merged[tail_idx - 1] = std::move(joined);
+                merged.pop_back();
+            }
+        }
+    }
+
+    return merged;
+}
+
 
 class Kokoro::Impl {
 public:
@@ -301,7 +378,16 @@ public:
         auto ref_s = load_voice_embedding_(phoneme_len);
 
         std::vector<float> audio_data;
-        if (!run_models_(input_ids, ref_s, run_config->speed, run_config->fade_out, run_config->sample_rate, audio_data)) {
+        const bool is_ja = is_ja_language(run_config->language);
+        const bool enable_short_double = (!is_ja) || (AX_TTS_JA_ENABLE_SHORT_DOUBLE != 0);
+
+        if (!run_models_(input_ids,
+                         ref_s,
+                         run_config->speed,
+                         run_config->fade_out,
+                         run_config->sample_rate,
+                         enable_short_double,
+                         audio_data)) {
             ALOGE("Run models failed!");
             return false;
         }
@@ -417,6 +503,7 @@ private:
         float speed,
         float fade_out,
         int sample_rate,
+        bool enable_short_double,
         std::vector<float>& audio
     ) {
         int actual_len = input_ids.size();
@@ -440,7 +527,7 @@ private:
         int actual_content_frames;
         int total_frames;
         if (!inference_single_chunk_(input_ids, 
-            ref_s, actual_len, speed, audio, actual_content_frames, total_frames)) {
+            ref_s, actual_len, speed, enable_short_double, audio, actual_content_frames, total_frames)) {
             return false;
         }
 
@@ -459,6 +546,7 @@ private:
         const std::vector<float>& ref_s,
         int actual_len,
         float speed,
+        bool enable_short_double,
         std::vector<float>& audio,
         int& actual_content_frames,
         int& total_frames
@@ -468,7 +556,7 @@ private:
         bool is_doubled = false;
         int original_actual_len = actual_len;
 
-        prepare_input_ids_(input_ids, actual_len, is_doubled);
+        prepare_input_ids_(input_ids, actual_len, is_doubled, enable_short_double);
 
         std::vector<int> input_lengths;
         std::vector<uint8_t> text_mask;
@@ -565,10 +653,19 @@ private:
         postprocess_x_to_audio_(x_, audio);
         
         if (is_doubled) {
-            actual_content_frames = std::accumulate(pred_dur.begin(), pred_dur.begin() + original_actual_len, 0);   
-            size_t audio_len = audio.size();
-            audio.erase(audio.begin() + audio_len / 2, audio.end());
-            total_frames = total_frames / 2;
+            actual_content_frames = std::accumulate(pred_dur.begin(), pred_dur.begin() + original_actual_len, 0);
+            if (actual_content_frames > 0 && total_frames > 0 && !audio.empty()) {
+                size_t keep_samples = static_cast<size_t>(
+                    llround(static_cast<double>(audio.size()) *
+                            static_cast<double>(actual_content_frames) /
+                            static_cast<double>(total_frames)));
+                keep_samples = std::max<size_t>(1, std::min(keep_samples, audio.size()));
+                audio.resize(keep_samples);
+            } else if (!audio.empty()) {
+                audio.resize(audio.size() / 2);
+            }
+            // We already clipped to the first utterance content area.
+            total_frames = actual_content_frames;
         } else {
             actual_content_frames = std::accumulate(pred_dur.begin(), pred_dur.begin() + actual_len, 0);
         }
@@ -600,13 +697,13 @@ private:
         }
     }
 
-    void prepare_input_ids_(std::vector<int>& input_ids, int& actual_len, bool& is_doubled) {
+    void prepare_input_ids_(std::vector<int>& input_ids, int& actual_len, bool& is_doubled, bool enable_short_double) {
         // 准备输入ID，对短输入进行复制处理
         is_doubled = false;
         int original_actual_len = actual_len;
 
         // printf("actual_len 3: %d\n", actual_len);
-        if (actual_len <= DOUBLE_INPUT_THRESHOLD) {
+        if (enable_short_double && actual_len <= DOUBLE_INPUT_THRESHOLD) {
             // printf("doubled!\n");
             is_doubled = true;
             // valid_content = input_ids[:, :actual_len]
@@ -913,6 +1010,12 @@ bool Kokoro::run(const std::string& text, AX_TTS_RUN_CONFIG* config, AX_TTS_AUDI
     }
 
     auto chunks = split_text_to_fit(frontend_, text, language, vocab_, max_len);
+    if (is_ja_language(language)) {
+        auto merged = merge_short_chunks_for_ja(frontend_, chunks, language, vocab_, max_len);
+        if (!merged.empty()) {
+            chunks.swap(merged);
+        }
+    }
     if (chunks.empty()) {
         return impl_->run(input_ids, config, audio);
     }
