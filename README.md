@@ -67,6 +67,11 @@ export PATH=$PATH:path of gcc-arm-9.2-2019.12-x86_64-aarch64-none-linux-gnu/bin
 export PATH=$PATH:path of arm-AX620E-linux-uclibcgnueabihf/bin
 ```
 
+ - AX620Q(arm-linux-gnueabihf, glibc)
+```bash
+export PATH=$PATH:path of arm-linux-gnueabihf/bin
+```
+
 ### 获取BSP
 
 ```bash
@@ -92,6 +97,13 @@ bash download_bsp.sh
  bash build_ax620q.sh
  ```
   编译完成后的产物在install/ax620q下
+
+ - AX620Q (arm-linux-gnueabihf + glibc)
+ ```bash
+ bash build_620qp.sh
+ ```
+  编译完成后的产物在install/ax620qp下  
+  如需自定义 MSP 路径可传环境变量：`BSP_MSP_DIR=/path/to/msp/out/arm_glibc bash build_620qp.sh`
 
  - AX8850
  ```bash

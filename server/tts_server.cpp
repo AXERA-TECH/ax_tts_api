@@ -16,7 +16,6 @@
 #include <netinet/in.h>
 #include <net/if.h>
 #include <arpa/inet.h>
-#include <filesystem>
 #include <fstream>
 #include <limits.h>
 #include <cstdlib>
@@ -27,8 +26,6 @@
 #include "openai_err.hpp"
 #include "utils/nlohmann/json.hpp"
 #include "utils/AudioFile.h"
-
-namespace fs = std::filesystem;
 
 static std::string pick_path(const char* env_var, const char* default_rel) {
     const char* env = std::getenv(env_var);
