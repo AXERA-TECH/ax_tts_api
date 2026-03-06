@@ -1,6 +1,11 @@
 cmake_minimum_required(VERSION 3.13 FATAL_ERROR)
 project(ax_tts_api)
 
+option(AX_TTS_JIEBA_USE_MMAP "Load jieba dict via mmap for lower memory usage" ON)
+if(AX_TTS_JIEBA_USE_MMAP)
+    add_definitions(-DAX_TTS_JIEBA_USE_MMAP)
+endif()
+
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED True)
 set(CMAKE_CXX_STANDARD 17)

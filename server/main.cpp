@@ -21,14 +21,18 @@ int main(int argc, char** argv) {
 #else
     cmd.add<std::string>("model_path", 'm', "model path which contains axmodel", false, "./models-ax630c");
 #endif
+    cmd.add<std::string>("espeak_data_path", 0, "Path to espeak-ng-data directory", false, "");
+    cmd.add<std::string>("jieba_dict_path", 0, "Path to jieba dict directory", false, "");
     cmd.parse_check(argc, argv);
 
     // 0. get app args, can be removed from user's app
     auto port = cmd.get<int>("port");
     auto model_path = cmd.get<std::string>("model_path");
+    auto espeak_data_path = cmd.get<std::string>("espeak_data_path");
+    auto jieba_dict_path = cmd.get<std::string>("jieba_dict_path");
 
     TTSServer server;
-    if (!server.init(model_path)) {
+    if (!server.init(model_path, espeak_data_path, jieba_dict_path)) {
         ALOGE("Init server failed!");
         return -1;
     }

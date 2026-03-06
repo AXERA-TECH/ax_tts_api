@@ -16,6 +16,7 @@
 
 #include "tts/kokoro.hpp"
 #include "utils/logger.h"
+#include "utils/string_utils.hpp"
 #include "utils/memory_utils.hpp"
 #include "ax_model_runner/ax_model_runner.hpp"
 #include "onnxruntime_cxx_api.h"
@@ -91,6 +92,132 @@ std::vector<T> linspace(T a, T b, size_t N) {
     return xs;
 }
 
+static void append_pause(std::vector<float>& audio, int sample_rate, float pause_sec) {
+    if (pause_sec <= 0.0f) return;
+    int pause_samples = (int)(sample_rate * pause_sec);
+    if (pause_samples > 0) {
+        audio.insert(audio.end(), pause_samples, 0.0f);
+    }
+}
+
+static bool is_split_char(const std::string& c, const std::string& language, bool weak) {
+    const bool is_zh_ja = (language == "zh" || language == "ja");
+    if (c == "\n" || c == "\r") return true;
+
+    if (!weak) {
+        if (is_zh_ja) return c == "。" || c == "！" || c == "？";
+        return c == "." || c == "!" || c == "?";
+    }
+
+    if (is_zh_ja) return c == "，" || c == "、" || c == "；" || c == "：" || c == "…";
+    return c == "," || c == ";" || c == ":" || c == "…";
+}
+
+static std::vector<std::string> split_text_by_punct(const std::string& text,
+                                                    const std::string& language,
+                                                    bool weak) {
+    std::vector<std::string> result;
+    auto chars = utils::split_utf8(text);
+    std::string cur;
+    cur.reserve(text.size());
+
+    for (const auto& c : chars) {
+        cur += c;
+        if (is_split_char(c, language, weak)) {
+            std::string trimmed = utils::strip(cur);
+            if (!trimmed.empty()) result.emplace_back(trimmed);
+            cur.clear();
+        }
+    }
+    std::string trimmed = utils::strip(cur);
+    if (!trimmed.empty()) result.emplace_back(trimmed);
+    return result;
+}
+
+static std::vector<std::string> split_text_by_max_chars(const std::string& text, int max_chars) {
+    std::vector<std::string> result;
+    std::string trimmed = utils::strip(text);
+    if (trimmed.empty()) return result;
+    if (max_chars <= 0) {
+        result.emplace_back(trimmed);
+        return result;
+    }
+
+    auto chars = utils::split_utf8(trimmed);
+    std::string cur;
+    int cnt = 0;
+    for (const auto& c : chars) {
+        cur += c;
+        cnt++;
+        if (cnt >= max_chars) {
+            std::string t = utils::strip(cur);
+            if (!t.empty()) result.emplace_back(t);
+            cur.clear();
+            cnt = 0;
+        }
+    }
+    std::string t = utils::strip(cur);
+    if (!t.empty()) result.emplace_back(t);
+    return result;
+}
+
+static bool fits_max_len(const std::shared_ptr<TTSFrontend>& frontend,
+                         const std::string& text,
+                         const std::string& language,
+                         const std::map<std::string, int>& vocab,
+                         int max_len) {
+    int err = 0;
+    auto ids = frontend->run(text, language, vocab, err);
+    return err == 0 && (int)ids.size() <= max_len;
+}
+
+static std::vector<std::string> split_text_to_fit(const std::shared_ptr<TTSFrontend>& frontend,
+                                                  const std::string& text,
+                                                  const std::string& language,
+                                                  const std::map<std::string, int>& vocab,
+                                                  int max_len,
+                                                  int depth = 0) {
+    std::string trimmed = utils::strip(text);
+    if (trimmed.empty()) return {};
+    if (fits_max_len(frontend, trimmed, language, vocab, max_len)) return {trimmed};
+
+    if (depth == 0) {
+        auto strong = split_text_by_punct(trimmed, language, false);
+        if (strong.size() > 1) {
+            std::vector<std::string> out;
+            for (const auto& s : strong) {
+                auto subs = split_text_to_fit(frontend, s, language, vocab, max_len, depth + 1);
+                out.insert(out.end(), subs.begin(), subs.end());
+            }
+            return out;
+        }
+    }
+
+    auto weak = split_text_by_punct(trimmed, language, true);
+    if (weak.size() > 1) {
+        std::vector<std::string> out;
+        for (const auto& s : weak) {
+            auto subs = split_text_to_fit(frontend, s, language, vocab, max_len, depth + 1);
+            out.insert(out.end(), subs.begin(), subs.end());
+        }
+        return out;
+    }
+
+    int max_chars = std::max(8, 40 - depth * 8);
+    auto parts = split_text_by_max_chars(trimmed, max_chars);
+    if (parts.size() > 1) {
+        std::vector<std::string> out;
+        for (const auto& p : parts) {
+            auto subs = split_text_to_fit(frontend, p, language, vocab, max_len, depth + 1);
+            out.insert(out.end(), subs.begin(), subs.end());
+        }
+        return out;
+    }
+
+    // Give up: return single piece, impl will truncate.
+    return {trimmed};
+}
+
 
 class Kokoro::Impl {
 public:
@@ -136,6 +263,8 @@ public:
         return true;
     }
 
+    int get_max_seq_len() const { return max_seq_len_; }
+
     void uninit(void) {
         model1_.unload_model();
         model2_.unload_model();
@@ -168,6 +297,7 @@ public:
         // get voice
         int phoneme_len = (int)input_ids.size() - 2;
         if (phoneme_len < 0) phoneme_len = 0;
+
         auto ref_s = load_voice_embedding_(phoneme_len);
 
         std::vector<float> audio_data;
@@ -777,7 +907,51 @@ bool Kokoro::run(const std::string& text, AX_TTS_RUN_CONFIG* config, AX_TTS_AUDI
         return false;
     }
 
-    return impl_->run(input_ids, config, audio);
+    int max_len = impl_->get_max_seq_len();
+    if ((int)input_ids.size() <= max_len) {
+        return impl_->run(input_ids, config, audio);
+    }
+
+    auto chunks = split_text_to_fit(frontend_, text, language, vocab_, max_len);
+    if (chunks.empty()) {
+        return impl_->run(input_ids, config, audio);
+    }
+
+    std::vector<float> audio_full;
+    for (size_t i = 0; i < chunks.size(); i++) {
+        int err2 = 0;
+        auto ids = frontend_->run(chunks[i], language, vocab_, err2);
+        if (err2 != 0) {
+            ALOGE("Run frontend failed in chunk %zu! err=%d", i, err2);
+            return false;
+        }
+
+        AX_TTS_AUDIO* seg_audio = nullptr;
+        AX_TTS_RUN_CONFIG seg_cfg = *config;
+        seg_cfg.fade_out = (i + 1 == chunks.size()) ? config->fade_out : 0.0f;
+        if (!impl_->run(ids, &seg_cfg, &seg_audio)) {
+            ALOGE("Run models failed in chunk %zu", i);
+            if (seg_audio) free(seg_audio);
+            return false;
+        }
+
+        if (seg_audio && seg_audio->num_samples > 0) {
+            audio_full.insert(audio_full.end(), seg_audio->data, seg_audio->data + seg_audio->num_samples);
+        }
+        if (seg_audio) free(seg_audio);
+
+        if (i + 1 != chunks.size()) {
+            append_pause(audio_full, config->sample_rate, DEFAULT_PAUSE);
+        }
+    }
+
+    *audio = (AX_TTS_AUDIO*)malloc(sizeof(AX_TTS_AUDIO) + sizeof(float) * audio_full.size());
+    AX_TTS_AUDIO* audio_ptr = *audio;
+    audio_ptr->channels = 1;
+    audio_ptr->num_samples = audio_full.size();
+    audio_ptr->sample_rate = config->sample_rate;
+    std::memcpy(audio_ptr->data, audio_full.data(), sizeof(float) * audio_full.size());
+    return true;
 }
 
 bool Kokoro::load_vocab_(const std::string& vocab_path) {

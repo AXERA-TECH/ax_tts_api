@@ -172,6 +172,24 @@ python test_tts_server.py --ip 10.126.33.140 --port 8080 -t "Hello, World" --out
 ```
 Check python test_tts_server.py --help for help.  
 
+#### 目标设备冒烟测试（无需 ctest）
+
+在目标设备启动服务后，可在任意机器执行：
+
+```bash
+cd scripts
+./device_smoke_test.sh 10.126.33.188 8080 /tmp/tts_smoke
+```
+
+该脚本会验证：
+- 英文可用
+- 日语假名可用
+- 日语含汉字输入会被拒绝（HTTP 400）
+
+#### 重要说明
+- 日语仅支持假名（平假名/片假名）。含汉字输入会返回 400。
+- Jieba 词典默认使用 mmap 加载（编译宏 `AX_TTS_JIEBA_USE_MMAP`，默认 ON）。
+
 
 ### 单元测试
 

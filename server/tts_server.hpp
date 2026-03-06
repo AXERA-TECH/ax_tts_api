@@ -92,7 +92,9 @@ public:
     TTSServer() = default;
     ~TTSServer() = default;
 
-    bool init(const std::string& model_path);
+    bool init(const std::string& model_path,
+              const std::string& espeak_data_path = "",
+              const std::string& jieba_dict_path = "");
     void start(int port = DEFAULT_PORT);
     void stop();
 
@@ -118,4 +120,6 @@ private:
     std::map<std::string, AX_TTS_HANDLE> handles_;
     httplib::Server srv_;
     std::string model_path_;
+    std::string espeak_data_path_;
+    std::string jieba_dict_path_;
 };

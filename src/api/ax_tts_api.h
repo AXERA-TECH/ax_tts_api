@@ -16,7 +16,7 @@ extern "C" {
 
 #define AX_TTS_API __attribute__((visibility("default")))
 
-#define AX_TTS_MAX_STR_LEN  32
+#define AX_TTS_MAX_STR_LEN  256
 
 // Supported TTS models
 enum AX_TTS_TYPE_E {
