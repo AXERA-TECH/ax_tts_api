@@ -148,6 +148,7 @@ export(EXPORT ax_tts_api-targets
 # 设置RPATH
 set_target_properties(main PROPERTIES
     INSTALL_RPATH "$ORIGIN/lib"
-    BUILD_WITH_INSTALL_RPATH TRUE  # 构建时也使用install的RPATH
+    # BUILD_WITH_INSTALL_RPATH TRUE
+    BUILD_RPATH "$ORIGIN"
     SKIP_BUILD_RPATH FALSE
 )
