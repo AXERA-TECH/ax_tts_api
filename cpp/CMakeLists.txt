@@ -34,6 +34,7 @@ endif()
 option(BUILD_TESTS "Build unit tests from tests/" OFF)
 option(LOG_LEVEL_DEBUG "Print debug level logs" OFF)
 option(BUILD_SERVER "Build tts server" ON)
+option(BUILD_PYTHON_BINDINGS "Build Python pybind11 bindings" OFF)
 
 # 日志水平
 if (LOG_LEVEL_DEBUG)
@@ -111,6 +112,11 @@ endif()
 # 服务端
 if (BUILD_SERVER)
     add_subdirectory(server)
+endif()
+
+# Python bindings
+if (BUILD_PYTHON_BINDINGS)
+    add_subdirectory(../python ${CMAKE_BINARY_DIR}/python)
 endif()
 
 # 安装 ax_tts_api 库和头文件

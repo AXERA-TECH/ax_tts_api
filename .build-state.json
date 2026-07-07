@@ -3,13 +3,34 @@
   "stack": "CMake/C++/Python-pybind11",
   "base_branch": "main",
   "branch": "feat/build-20260707-01",
-  "iteration": 2,
+  "iteration": 3,
   "validation_command": "cd cpp && cmake -S . -B ../build_test -DCHIP_AX8850=ON -DCMAKE_TOOLCHAIN_FILE=../toolchains/aarch64-none-linux-gnu.toolchain.cmake -DBUILD_SERVER=OFF -DBUILD_TESTS=OFF && cmake --build ../build_test -j4",
   "requirement_alignment": {
     "goal": "把C++部分搬到cpp文件夹，然后建一个python文件夹，里面做pybind绑定C++部分实现API",
     "non_goals": [],
-    "cpp_move_list": ["src/", "main.cpp", "server/", "tests/", "CMakeLists.txt", "cmake/", "third_party/"],
-    "keep_at_root": ["dict/", "espeak-ng-data/", "models-*", "scripts/", "build_*.sh", "toolchains/", "install/", "download_*.sh", "*.wav", "ax620e_bsp_sdk", "ax650n_bsp_sdk", "axcl_bsp_sdk"],
+    "cpp_move_list": [
+      "src/",
+      "main.cpp",
+      "server/",
+      "tests/",
+      "CMakeLists.txt",
+      "cmake/",
+      "third_party/"
+    ],
+    "keep_at_root": [
+      "dict/",
+      "espeak-ng-data/",
+      "models-*",
+      "scripts/",
+      "build_*.sh",
+      "toolchains/",
+      "install/",
+      "download_*.sh",
+      "*.wav",
+      "ax620e_bsp_sdk",
+      "ax650n_bsp_sdk",
+      "axcl_bsp_sdk"
+    ],
     "python_class": "AX_TTS",
     "python_return": "numpy array (sample_rate, numpy_array)",
     "python_build": "pyproject.toml + setuptools + pybind11",
@@ -29,6 +50,15 @@
         "编译通过: cmake --build build_test",
         "构建脚本 build_*.sh 中 cmake 路径更新为引用 cpp/"
       ]
+    },
+    {
+      "number": 6,
+      "title": "feat[2]: 创建python/目录，pybind11绑定C++ API",
+      "acceptance_checks": [
+        "pyproject.toml 可正常构建",
+        "import ax_tts 可导入",
+        "AX_TTS 类可实例化"
+      ]
     }
   ],
   "rounds": [
@@ -44,6 +74,23 @@
         "command": "cmake -S cpp -B build_test -DCHIP_AX8850=ON -DCMAKE_TOOLCHAIN_FILE=../toolchains/aarch64-none-linux-gnu.toolchain.cmake && cmake --build build_test -j4",
         "result": "pass",
         "evidence": "CMake configure OK, libax_tts_api.a and main built successfully"
+      },
+      "status": "complete"
+    },
+    {
+      "iteration": 2,
+      "issue": 6,
+      "changed_files": [
+        "python/CMakeLists.txt",
+        "python/pyproject.toml",
+        "python/src/bindings.cpp",
+        "python/src/ax_tts/__init__.py",
+        "cpp/CMakeLists.txt (added BUILD_PYTHON_BINDINGS option)"
+      ],
+      "validation": {
+        "command": "cmake -S cpp -B build_test -DBUILD_PYTHON_BINDINGS=ON ... && cmake --build build_test -j4",
+        "result": "pass",
+        "evidence": "CMake configure OK, _ax_tts_core.so built for aarch64"
       },
       "status": "complete"
     }
