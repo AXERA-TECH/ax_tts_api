@@ -276,14 +276,29 @@ options:
 ### 服务端(asr_server)
 ### 服务端(tts_server)
 
+OpenAI-Compatiable API:
+
 ```
 ./install/ax8850_aarch64/tts_server --port 8080
 
 ```
 
+```bash
+# 标准 OpenAI SDK 调用 (Python)
+from openai import OpenAI
+client = OpenAI(base_url="http://10.126.33.140:8080/v1", api_key="not-needed")
+response = client.audio.speech.create(
+    model="tts-1",
+    voice="af_heart",
+    input="Hello world!",
+    response_format="wav"
+)
+response.stream_to_file("output.wav")
+```
+
 Usage:  
 ```
-usage: ./install/ax650/tts_server [options] ...
+usage: ./install/ax8850_aarch64/tts_server [options] ...
 options:
   -p, --port          On which port to run the server (int [=8080])
   -m, --model_path    model path which contains axmodel (string [=./models-ax650])
@@ -292,14 +307,29 @@ options:
 
 ```
 
+### OpenAI 兼容性
+
+完全兼容 OpenAI `POST /v1/audio/speech` API，支持字段:
+
+| 字段 | 说明 |
+|---|---|
+| `model` | `"tts-1"` (kokoro) / `"tts-1-hd"` (melotts)，也可用内部名 `"kokoro"` / `"melotts"` |
+| `input` | 输入文本 (UTF-8)，最长 4096 字符 |
+| `voice` | 音色名，支持 OpenAI 名称 (alloy/echo/fable/onyx/nova/shimmer) 和内部分类名 (af_heart/zf_xiaoxiao/jf_gongitsune) |
+| `speed` | 语速 0.25–4.0，默认 1.0 |
+| `response_format` | `"wav"` (默认) / `"pcm"` (raw float32) |
+| `instructions` | 可选，接受 `"en"`/`"zh"`/`"ja"` 覆盖语言推断 |
+
+语言从 voice 前缀自动推断：af_* → en，zf_* → zh，jf_* → ja。
+
 ### 客户端
 
 #### Python
 
 ```
 cd scripts
-pip install openai
-python test_tts_server.py --ip 10.126.33.140 --port 8080 -t "Hello, World" --output test_en
+pip install openai numpy
+python test_tts_server.py
 ```
 Check python test_tts_server.py --help for help.  
 

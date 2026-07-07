@@ -101,8 +101,35 @@ static bool is_jp_kana_only(const std::string& s) {
 
 static std::map<std::string, AX_TTS_TYPE_E> MODEL_MAP = {
         {"kokoro", AX_KOKORO},
-        {"melotts", AX_MELOTTS}
+        {"melotts", AX_MELOTTS},
+        {"tts-1", AX_KOKORO},
+        {"tts-1-hd", AX_MELOTTS}
     };
+
+// Infer language code from OpenAI-style voice name prefix.
+// af_* → en, zf_* → zh, jf_* → ja, default → en.
+static std::string infer_language(const std::string& voice) {
+    if (voice.rfind("af_", 0) == 0) return "en";
+    if (voice.rfind("zf_", 0) == 0) return "zh";
+    if (voice.rfind("jf_", 0) == 0) return "ja";
+    if (voice.rfind("en", 0) == 0)  return "en";
+    if (voice.rfind("zh", 0) == 0)  return "zh";
+    if (voice.rfind("ja", 0) == 0)  return "ja";
+    return "en";
+}
+
+// Map OpenAI voice names to internal voice names.
+// OpenAI compatible names: alloy/echo/fable/onyx/nova/shimmer → af_heart (English default)
+static std::string resolve_voice(const std::string& voice, const std::string& language) {
+    static const std::map<std::string, std::string> OPENAI_VOICE_MAP = {
+        {"alloy", "af_heart"}, {"echo", "af_heart"}, {"fable", "af_heart"},
+        {"onyx", "af_heart"}, {"nova", "af_heart"}, {"shimmer", "af_heart"},
+    };
+    if (voice.empty()) return "";
+    auto it = OPENAI_VOICE_MAP.find(voice);
+    if (it != OPENAI_VOICE_MAP.end()) return it->second;
+    return voice; // pass through internal voice names
+}
 
 class InlineTaskQueue final : public httplib::TaskQueue {
 public:
@@ -188,7 +215,7 @@ bool TTSServer::init(const std::string& model_path,
 
     this->setup_routes_();
     // Preload default model in main thread to avoid thread-unsafe init in request handler
-    if (!this->load_tts_("kokoro")) {
+    if (!this->load_tts_("tts-1")) {
         ALOGE("Preload kokoro failed!");
         return false;
     }
@@ -224,6 +251,12 @@ void TTSServer::cleanup_handles_() {
 
 // ================ PRIVATE ================
 void TTSServer::setup_routes_() {
+    // CORS preflight
+    this->srv_.Options(TTS_ENDPOINT, [this](const httplib::Request& req, httplib::Response& res) {
+        set_CORS_headers_(res);
+        res.status = 204;
+    });
+
     this->srv_.Post(TTS_ENDPOINT, [this](const httplib::Request& req, httplib::Response& res) {
         // 1. 设置CORS头
         set_CORS_headers_(res);
@@ -237,26 +270,32 @@ void TTSServer::setup_routes_() {
 
         // 3. 获取参数
         std::string input_text;
-        if (json_data.contains("phonemes")) {
-            input_text = "__PHONEMES__:" + std::string(json_data["phonemes"]);
-        } else {
-            input_text = json_data["input"];
-        }
         std::string model = json_data["model"];
-        std::string language = json_data["instructions"];
+        input_text = json_data["input"];
+
         std::string voice;
-        if (json_data.contains("voice")) {
+        if (json_data.contains("voice"))
             voice = json_data["voice"];
+
+        // Infer language from voice, allow instructions override for backward compat
+        std::string language = infer_language(voice);
+        if (json_data.contains("instructions")) {
+            std::string inst = json_data["instructions"];
+            if (inst == "en" || inst == "zh" || inst == "ja") language = inst;
         }
+
         float speed = 1.0f;
         if (json_data.contains("speed"))
             speed = json_data["speed"];
 
+        std::string response_format = "wav";
+        if (json_data.contains("response_format"))
+            response_format = json_data["response_format"];
+
         if (language == "ja") {
-            static const std::string kPhonemePrefix = "__PHONEMES__:";
-            if (input_text.rfind(kPhonemePrefix, 0) != 0 && !is_jp_kana_only(input_text)) {
+            if (!is_jp_kana_only(input_text)) {
                 ErrorResponse openai_res(OPENAI_ERR_BAD_REQUEST,
-                    "Japanese input must be kana-only (hiragana/katakana) or provide phonemes.",
+                    "Japanese input must be kana-only (hiragana/katakana).",
                     "input");
                 openai_res.to_res(res);
                 return;
@@ -270,7 +309,8 @@ void TTSServer::setup_routes_() {
         AX_TTS_RUN_CONFIG run_config;
         run_config.fade_out = 0.3f;
         run_config.speed = speed;
-        if (model == "kokoro")
+        AX_TTS_TYPE_E tts_type = MODEL_MAP.at(model);
+        if (tts_type == AX_KOKORO)
             run_config.sample_rate = 24000;
         else
             run_config.sample_rate = 44100;
@@ -280,6 +320,8 @@ void TTSServer::setup_routes_() {
             if (language == "ja") voice_str = "jf_gongitsune";
             else if (language == "zh") voice_str = "zf_xiaoxiao";
             else voice_str = "af_heart";
+        } else {
+            voice_str = resolve_voice(voice_str, language);
         }
         run_config.language = language.c_str();
         run_config.voice = voice_str.c_str();
@@ -294,11 +336,19 @@ void TTSServer::setup_routes_() {
             return;
         }
 
-        // Template must be a character array, not a string constant, last 6 chars must be XXXXXX
+        if (response_format == "pcm") {
+            auto* pcm_data = reinterpret_cast<const char*>(audio->data);
+            size_t pcm_bytes = audio->num_samples * sizeof(float);
+            res.set_content(pcm_data, pcm_bytes, "audio/pcm");
+            res.status = 200;
+            free(audio);
+            return;
+        }
+
+        // response_format == "wav": encode to WAV via temp file
         char tmp_filename[] = "/tmp/tts_server_outputXXXXXX"; 
         int fd;
 
-        // Create the unique file and get the file descriptor
         fd = mkstemp(tmp_filename);
 
         if (fd == -1) {
@@ -308,16 +358,8 @@ void TTSServer::setup_routes_() {
             return;
         }
 
-        // template now holds the unique filename (e.g., "/tmp/mytempfilea1B2c3")
         ALOGD("Created temporary file: %s", tmp_filename);
-
-        // You can now write to the file using the file descriptor, 
-        // for example, with write() or by using fdopen() to get a FILE* stream
-        // ... use fd ... 
-
-        // Close the file descriptor
         close(fd);
-
 
         AudioFile<float> audio_file;
         std::vector<std::vector<float> > audio_samples{std::vector<float>(audio->data, audio->data + audio->num_samples)};
@@ -337,7 +379,6 @@ void TTSServer::setup_routes_() {
 
         std::vector<char> buffer = read_binary_file(tmp_filename);
 
-        // Remove the file after use
         if (unlink(tmp_filename) != 0) {
             perror("unlink failed");
             ErrorResponse openai_res(OPENAI_ERR_INTERNAL_SERVER_ERROR, "unlink failed!", "");
@@ -345,8 +386,7 @@ void TTSServer::setup_routes_() {
             return;
         }
 
-        // Set the content with the correct MIME type for WAV files
-        res.set_content(buffer.data(), buffer.size(), "audio/wav"); //
+        res.set_content(buffer.data(), buffer.size(), "audio/wav");
         res.status = 200;
 
         return;
@@ -442,22 +482,16 @@ bool TTSServer::check_request_(const httplib::Request& req, httplib::Response& r
                 return false;
             }
         }
-        
+
         // 3. 检查language
         {
-            if (!json_data.contains("instructions")) {
-                ErrorResponse openai_res(OPENAI_ERR_BAD_REQUEST, "\"instructions\" field must be provided.", "instructions");
-                openai_res.to_res(res);
-                return false;
-            }
+            // instructions is optional; language is inferred from voice
         }
 
         // 4. 检查input
         {
-            bool has_input = json_data.contains("input");
-            bool has_phonemes = json_data.contains("phonemes");
-            if (!has_input && !has_phonemes) {
-                ErrorResponse openai_res(OPENAI_ERR_BAD_REQUEST, "\"input\" or \"phonemes\" field must be provided.", "input");
+            if (!json_data.contains("input")) {
+                ErrorResponse openai_res(OPENAI_ERR_BAD_REQUEST, "\"input\" field must be provided.", "input");
                 openai_res.to_res(res);
                 return false;
             }
