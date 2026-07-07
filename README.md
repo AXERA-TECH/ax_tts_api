@@ -273,10 +273,9 @@ options:
 
 ```
 
-### 服务端(asr_server)
 ### 服务端(tts_server)
 
-OpenAI-Compatiable API:
+OpenAI-Compatible API:
 
 ```
 ./install/ax8850_aarch64/tts_server --port 8080
@@ -331,7 +330,17 @@ cd scripts
 pip install openai numpy
 python test_tts_server.py
 ```
-Check python test_tts_server.py --help for help.  
+
+或直接用 OpenAI SDK:
+
+```python
+from openai import OpenAI
+client = OpenAI(base_url="http://IP:8080/v1", api_key="not-needed")
+with client.audio.speech.with_streaming_response.create(
+    model="tts-1", voice="alloy", input="Hello world!"
+) as resp:
+    resp.stream_to_file("output.wav")
+```
 
 #### 目标设备冒烟测试（无需 ctest）
 
