@@ -197,6 +197,20 @@ static std::vector<char> read_binary_file(const std::string& filepath) {
     return buffer;
 }
 
+// Check if model files exist under model_path; returns false with guidance if not.
+static bool check_models_exist(const std::string& model_path) {
+    for (const auto& sub : {"kokoro", "melotts"}) {
+        std::string probe = model_path + "/" + sub;
+        if (access(probe.c_str(), F_OK) == 0) return true;
+    }
+    ALOGE("============================================");
+    ALOGE("No model files found under: %s", model_path.c_str());
+    ALOGE("Please download models first:");
+    ALOGE("  bash download_models.sh");
+    ALOGE("============================================");
+    return false;
+}
+
 TTSServer::~TTSServer() {
     stop();
     cleanup_handles_();
@@ -208,6 +222,10 @@ bool TTSServer::init(const std::string& model_path,
     model_path_ = model_path;
     espeak_data_path_ = espeak_data_path;
     jieba_dict_path_ = jieba_dict_path;
+
+    if (!check_models_exist(model_path_)) {
+        return false;
+    }
 
     // Run handlers in the server thread to avoid thread-unsafe TTS runtime issues.
     // httplib takes ownership via unique_ptr and deletes the queue after each request.

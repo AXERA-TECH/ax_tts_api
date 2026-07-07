@@ -66,6 +66,20 @@ int main(int argc, char** argv) {
     init_config.espeak_data_path = espeak_data_path.c_str();
     init_config.jieba_dict_path = jieba_dict_path.c_str();
 
+    // Check model files exist before init
+    {
+        bool found = false;
+        for (const auto& sub : {"kokoro", "melotts"}) {
+            std::string probe = model_path + "/" + sub;
+            if (access(probe.c_str(), F_OK) == 0) { found = true; break; }
+        }
+        if (!found) {
+            fprintf(stderr, "ERROR: No model files under %s\n", model_path.c_str());
+            fprintf(stderr, "Please run: bash download_models.sh\n");
+            return -1;
+        }
+    }
+
     AX_TTS_HANDLE handle = NULL;
     AX_TTS_ERROR_E err = AX_TTS_Init(AX_KOKORO, &init_config, &handle);
     if (err != AX_TTS_OK) {
