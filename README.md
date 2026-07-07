@@ -171,7 +171,7 @@ bash download_bsp.sh
 
  - AX8850
  ```bash
- bash build_ax8850_aarch64.sh.sh
+ bash build_ax8850_aarch64.sh
  ```
   编译完成后的产物在install/ax8850_aarch64下
 

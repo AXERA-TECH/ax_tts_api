@@ -102,6 +102,13 @@ typedef void* AX_TTS_HANDLE;
 AX_TTS_API const char* AX_TTS_GetVersion(void);
 
 /**
+ * @brief 返回错误码对应的可读描述字符串。
+ * @param err  AX_TTS_Init / AX_TTS_Run 返回的错误码。
+ * @return 静态字符串，如 "OK"、"null handle" 等。传入未知码返回 "unknown error"。
+ */
+AX_TTS_API const char* AX_TTS_GetErrorString(AX_TTS_ERROR_E err);
+
+/**
  * @brief 初始化 TTS 引擎。
  * 
  * @param tts_type    TTS 模型类型（AX_KOKORO 或 AX_MELOTTS）。

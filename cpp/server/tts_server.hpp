@@ -90,7 +90,7 @@
 class TTSServer {
 public:
     TTSServer() = default;
-    ~TTSServer() = default;
+    ~TTSServer();
 
     bool init(const std::string& model_path,
               const std::string& espeak_data_path = "",
@@ -100,6 +100,7 @@ public:
 
 private:
     void setup_routes_();
+    void cleanup_handles_();
     AX_TTS_HANDLE load_tts_(const std::string& model_name);
     // 设置CORS头
     void set_CORS_headers_(httplib::Response& res);

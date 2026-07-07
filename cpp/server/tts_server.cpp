@@ -150,11 +150,12 @@ int get_interface_ip(const char *interface_name, char *ip_address_buffer) {
     return 0;
 }
 
-// Function to read a binary file into a vector of chars
-std::vector<char> read_binary_file(const std::string& filepath) {
+// Read a binary file; returns empty vector on failure.
+static std::vector<char> read_binary_file(const std::string& filepath) {
     std::ifstream file(filepath, std::ios::binary | std::ios::ate);
     if (!file) {
-        throw std::runtime_error("Cannot open file: " + filepath);
+        ALOGE("Cannot open file: %s", filepath.c_str());
+        return {};
     }
 
     std::streamsize size = file.tellg();
@@ -162,10 +163,16 @@ std::vector<char> read_binary_file(const std::string& filepath) {
 
     std::vector<char> buffer(size);
     if (!file.read(buffer.data(), size)) {
-        throw std::runtime_error("Error reading file: " + filepath);
+        ALOGE("Error reading file: %s", filepath.c_str());
+        return {};
     }
 
     return buffer;
+}
+
+TTSServer::~TTSServer() {
+    stop();
+    cleanup_handles_();
 }
 
 bool TTSServer::init(const std::string& model_path,
@@ -175,7 +182,8 @@ bool TTSServer::init(const std::string& model_path,
     espeak_data_path_ = espeak_data_path;
     jieba_dict_path_ = jieba_dict_path;
 
-    // Run handlers in the server thread to avoid thread-unsafe TTS runtime issues
+    // Run handlers in the server thread to avoid thread-unsafe TTS runtime issues.
+    // httplib takes ownership via unique_ptr and deletes the queue after each request.
     this->srv_.new_task_queue = [] { return new InlineTaskQueue(); };
 
     this->setup_routes_();
@@ -205,6 +213,13 @@ void TTSServer::start(int port) {
 void TTSServer::stop() {
     ALOGI("Terminate server.");
     this->srv_.stop();
+}
+
+void TTSServer::cleanup_handles_() {
+    for (auto& kv : handles_) {
+        AX_TTS_Uninit(kv.second);
+    }
+    handles_.clear();
 }
 
 // ================ PRIVATE ================

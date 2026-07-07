@@ -10,6 +10,16 @@ import numpy as np
 from . import _ax_tts_core
 
 
+def get_version() -> str:
+    """Return the C API version string."""
+    return _ax_tts_core.get_version()
+
+
+def get_error_string(err: int) -> str:
+    """Return human-readable description of an error code."""
+    return _ax_tts_core.get_error_string(err)
+
+
 class AX_TTS:
     """Axera TTS engine wrapper.
 
@@ -38,7 +48,7 @@ class AX_TTS:
 
         err, self._handle = _ax_tts_core.init(tts_type_enum, config)
         if err != _ax_tts_core.ErrorCode.OK:
-            raise RuntimeError(f"AX_TTS_Init failed with error {err}")
+            raise RuntimeError(f"AX_TTS_Init failed: {_ax_tts_core.get_error_string(err)} (code {err})")
 
     def synthesize(
         self,

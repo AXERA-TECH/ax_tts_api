@@ -63,6 +63,9 @@ PYBIND11_MODULE(_ax_tts_core, m) {
 
     m.def("get_version", &AX_TTS_GetVersion, "Get API version string");
 
+    m.def("get_error_string", &AX_TTS_GetErrorString, "Get human-readable error description",
+          py::arg("err"));
+
     m.def("uninit", &AX_TTS_Uninit, "Release TTS resources",
           py::arg("handle"));
 
