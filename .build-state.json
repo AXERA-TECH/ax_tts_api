@@ -115,6 +115,19 @@
         "evidence": "6/6 static tests passed"
       },
       "status": "complete"
+    },
+    {
+      "iteration": "fix",
+      "issue": null,
+      "changed_files": [
+        "build_*.sh",
+        "cpp/cmake/msp_dependencies.cmake"
+      ],
+      "validation": {
+        "result": "pass",
+        "evidence": "committed missing changes from iter-1"
+      },
+      "status": "complete"
     }
   ],
   "pre_existing_changes": [
@@ -130,5 +143,6 @@
   "assumptions": [
     "aarch64 cross-compilation toolchain is available for build validation",
     "pybind11 will be installed via pip in iteration 2"
-  ]
+  ],
+  "pr_url": "https://github.com/AXERA-TECH/ax_tts_api/pull/8"
 }

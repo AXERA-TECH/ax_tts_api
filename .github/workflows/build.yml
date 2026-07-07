@@ -1,0 +1,135 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  # ============================================================
+  # aarch64 交叉编译 (AX650 / AX630C / AX8850)
+  # ============================================================
+  build-aarch64:
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        chip: [AX650, AX630C, AX8850]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache aarch64 toolchain
+        id: cache-toolchain
+        uses: actions/cache@v4
+        with:
+          path: /tmp/aarch64-toolchain
+          key: aarch64-toolchain-9.2-2019.12
+
+      - name: Download aarch64 toolchain
+        if: steps.cache-toolchain.outputs.cache-hit != 'true'
+        run: |
+          curl -L -o /tmp/gcc-arm.tar.xz \
+            "https://developer.arm.com/-/media/Files/downloads/gnu-a/9.2-2019.12/binrel/gcc-arm-9.2-2019.12-x86_64-aarch64-none-linux-gnu.tar.xz"
+          mkdir -p /tmp/aarch64-toolchain
+          tar -xf /tmp/gcc-arm.tar.xz -C /tmp/aarch64-toolchain
+
+      - name: Setup toolchain PATH
+        run: |
+          echo "$(find /tmp/aarch64-toolchain -name 'aarch64-none-linux-gnu-gcc' -exec dirname {} \; | head -1)" >> $GITHUB_PATH
+
+      - name: Setup CMake
+        uses: lukka/get-cmake@latest
+
+      - name: Download BSP SDK
+        run: |
+          if [ "${{ matrix.chip }}" = "AX8850" ]; then
+            git clone https://github.com/Abandon-ht/axcl_bsp_sdk.git --depth=1 axcl_bsp_sdk
+          elif [ "${{ matrix.chip }}" = "AX650" ]; then
+            git clone https://github.com/AXERA-TECH/ax650n_bsp_sdk.git --depth=1 ax650n_bsp_sdk
+          elif [ "${{ matrix.chip }}" = "AX630C" ]; then
+            git clone https://github.com/AXERA-TECH/ax620e_bsp_sdk.git --depth=1 ax620e_bsp_sdk
+          fi
+
+      - name: Build (${{ matrix.chip }})
+        run: |
+          mkdir -p build && cd build
+          cmake ../cpp \
+            -DCHIP_${{ matrix.chip }}=ON \
+            -DCMAKE_TOOLCHAIN_FILE=../toolchains/aarch64-none-linux-gnu.toolchain.cmake \
+            -DCMAKE_INSTALL_PREFIX=../install/${{ matrix.chip }} \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SERVER=ON -DBUILD_TESTS=ON
+          make -j$(nproc)
+          make install
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ax_tts_api-${{ matrix.chip }}
+          path: install/${{ matrix.chip }}/
+
+  # ============================================================
+  # ARM 交叉编译 (AX620Q uclibc + glibc)
+  # ============================================================
+  build-arm:
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - chip: AX620Q
+            toolchain_url: "https://github.com/AXERA-TECH/ax620q_bsp_sdk/releases/download/v2.0.0/arm-AX620E-linux-uclibcgnueabihf_V3_20240320.tgz"
+            toolchain_file: "arm-AX620E-linux-uclibcgnueabihf.toolchain.cmake"
+            bsp_repo: "https://github.com/AXERA-TECH/ax620e_bsp_sdk.git"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache ARM toolchain
+        id: cache-arm-toolchain
+        uses: actions/cache@v4
+        with:
+          path: /tmp/arm-toolchain-${{ matrix.chip }}
+          key: arm-toolchain-${{ matrix.chip }}-v3
+
+      - name: Download ARM toolchain
+        if: steps.cache-arm-toolchain.outputs.cache-hit != 'true'
+        run: |
+          curl -L -o /tmp/arm-toolchain.tgz "${{ matrix.toolchain_url }}"
+          mkdir -p /tmp/arm-toolchain-${{ matrix.chip }}
+          tar -xzf /tmp/arm-toolchain.tgz -C /tmp/arm-toolchain-${{ matrix.chip }}
+
+      - name: Setup toolchain PATH
+        run: |
+          TC_DIR="/tmp/arm-toolchain-${{ matrix.chip }}"
+          GCC=$(find "$TC_DIR" -name 'arm-*-gcc' -type f | head -1)
+          echo "$(dirname "$GCC")" >> $GITHUB_PATH
+
+      - name: Setup CMake
+        uses: lukka/get-cmake@latest
+
+      - name: Download BSP SDK
+        run: |
+          git clone ${{ matrix.bsp_repo }} --depth=1 ax620e_bsp_sdk
+
+      - name: Restore ARM third-party libs
+        run: bash download_bsp.sh --all-arch
+
+      - name: Build (${{ matrix.chip }})
+        run: |
+          mkdir -p build && cd build
+          cmake ../cpp \
+            -DCHIP_${{ matrix.chip }}=ON \
+            -DCMAKE_TOOLCHAIN_FILE=../toolchains/${{ matrix.toolchain_file }} \
+            -DCMAKE_INSTALL_PREFIX=../install/${{ matrix.chip }} \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SERVER=ON
+          make -j$(nproc)
+          make install
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ax_tts_api-${{ matrix.chip }}
+          path: install/${{ matrix.chip }}/

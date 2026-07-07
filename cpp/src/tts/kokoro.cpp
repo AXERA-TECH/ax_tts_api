@@ -303,13 +303,12 @@ public:
         uninit();
     }
 
-    bool init(AX_TTS_TYPE_E tts_type, AX_TTS_INIT_CONFIG* init_config) {
+    bool init(AX_TTS_TYPE_E tts_type, const std::string& model_path, const AX_TTS_INIT_CONFIG* init_config) {
         max_seq_len_ = init_config->max_seq_len;
 
-        std::string model_path(init_config->model_path);
         voice_path_ = model_path + "/voices/";
 
-        if (!init_config->espeak_data_path) {
+        if (!init_config->espeak_data_path || init_config->espeak_data_path[0] == '\0') {
             ALOGE("espeak_data_path is NULL!");
             return false;
         }
@@ -349,8 +348,8 @@ public:
         model4_.release();
     }
 
-    bool run(std::vector<int>& input_ids, AX_TTS_RUN_CONFIG* run_config, AX_TTS_AUDIO** audio) {
-        if (!run_config->voice) {
+    bool run(std::vector<int>& input_ids, const AX_TTS_RUN_CONFIG* run_config, AX_TTS_AUDIO** audio) {
+        if (!run_config->voice || run_config->voice[0] == '\0') {
             ALOGE("voice is not set");
             return false;
         }
@@ -979,8 +978,7 @@ Kokoro::~Kokoro() {
     uninit();
 }
 
-bool Kokoro::init(AX_TTS_TYPE_E tts_type, AX_TTS_INIT_CONFIG* init_config) {
-    std::string model_path(init_config->model_path);
+bool Kokoro::init(AX_TTS_TYPE_E tts_type, const std::string& model_path, const AX_TTS_INIT_CONFIG* init_config) {
     std::string vocab_path = model_path + "/vocab.txt";
 
     if (!load_vocab_(vocab_path)) {
@@ -988,14 +986,14 @@ bool Kokoro::init(AX_TTS_TYPE_E tts_type, AX_TTS_INIT_CONFIG* init_config) {
         return false;
     }
 
-    return impl_->init(tts_type, init_config);
+    return impl_->init(tts_type, model_path, init_config);
 }
 
 void Kokoro::uninit(void) {
     impl_.reset();
 }
 
-bool Kokoro::run(const std::string& text, AX_TTS_RUN_CONFIG* config, AX_TTS_AUDIO** audio) {
+bool Kokoro::run(const std::string& text, const AX_TTS_RUN_CONFIG* config, AX_TTS_AUDIO** audio) {
     int err = 0;
     std::string language(config->language);
     auto input_ids = frontend_->run(text, language, vocab_, err);

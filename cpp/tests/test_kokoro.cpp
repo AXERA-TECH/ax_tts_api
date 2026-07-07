@@ -37,20 +37,17 @@ static void test_en(AX_TTS_HANDLE handle) {
     run_config.fade_out = 0.3f;
     run_config.speed = 1.0f;
     run_config.sample_rate = 24000;
-    snprintf(run_config.language, AX_TTS_MAX_STR_LEN, "%s", "en");
-    snprintf(run_config.voice, AX_TTS_MAX_STR_LEN, "%s", "af_heart");
+    run_config.language = "en";
+    run_config.voice = "af_heart";
 
     Timer timer;
 
     timer.start();
 
     AX_TTS_AUDIO* audio = NULL;
-    int ret = AX_TTS_Run(handle, 
-                   input_text.c_str(), 
-                   &run_config,
-                   &audio); 
-    if (ret != 0) {
-        ALOGE("AX_TTS_Run failed!");
+    AX_TTS_ERROR_E err = AX_TTS_Run(handle, input_text.c_str(), &run_config, &audio);
+    if (err != AX_TTS_OK) {
+        ALOGE("AX_TTS_Run failed! err=%d", err);
         free(audio);
         return;
     }
@@ -103,19 +100,16 @@ static void test_zh(AX_TTS_HANDLE handle) {
     run_config.fade_out = 0.3f;
     run_config.speed = 1.0f;
     run_config.sample_rate = 24000;
-    snprintf(run_config.language, AX_TTS_MAX_STR_LEN, "%s", "zh");
-    snprintf(run_config.voice, AX_TTS_MAX_STR_LEN, "%s", "zf_xiaoxiao");
+    run_config.language = "zh";
+    run_config.voice = "zf_xiaoxiao";
 
     Timer timer;
 
     timer.start();
     AX_TTS_AUDIO* audio = NULL;
-    int ret = AX_TTS_Run(handle, 
-                   input_text.c_str(), 
-                   &run_config,
-                   &audio); 
-    if (ret != 0) {
-        ALOGE("AX_TTS_Run failed!");
+    AX_TTS_ERROR_E err = AX_TTS_Run(handle, input_text.c_str(), &run_config, &audio);
+    if (err != AX_TTS_OK) {
+        ALOGE("AX_TTS_Run failed! err=%d", err);
         free(audio);
         return;
     }
@@ -159,16 +153,17 @@ int main(int argc, char** argv) {
     AX_TTS_INIT_CONFIG init_config;
     init_config.max_seq_len = 96;
 #if defined(CHIP_AX650) || defined(CHIP_AX8850)    
-    snprintf(init_config.model_path, AX_TTS_MAX_STR_LEN, "%s", "models-ax650");
+    init_config.model_path = "models-ax650";
 #else
-    snprintf(init_config.model_path, AX_TTS_MAX_STR_LEN, "%s", "models-ax630c");
+    init_config.model_path = "models-ax630c";
 #endif
-    snprintf(init_config.espeak_data_path, AX_TTS_MAX_STR_LEN, "%s", "espeak-ng-data");
-    snprintf(init_config.jieba_dict_path, AX_TTS_MAX_STR_LEN, "%s", "dict");
+    init_config.espeak_data_path = "espeak-ng-data";
+    init_config.jieba_dict_path = "dict";
 
-    AX_TTS_HANDLE handle = AX_TTS_Init(AX_KOKORO, &init_config);
-    if (!handle) {
-        ALOGE("AX_TTS_Init failed!");
+    AX_TTS_HANDLE handle = NULL;
+    AX_TTS_ERROR_E err = AX_TTS_Init(AX_KOKORO, &init_config, &handle);
+    if (err != AX_TTS_OK) {
+        ALOGE("AX_TTS_Init failed! err=%d", err);
         return -1;
     }
 

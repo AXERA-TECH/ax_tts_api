@@ -1,4 +1,7 @@
 # ax_tts_api
+
+[![Build](https://github.com/AXERA-TECH/ax_tts_api/actions/workflows/build.yml/badge.svg)](https://github.com/AXERA-TECH/ax_tts_api/actions/workflows/build.yml)
+
 C++ TTS API on Axera platforms with Python bindings.
 
 支持平台:  
@@ -9,6 +12,10 @@ C++ TTS API on Axera platforms with Python bindings.
 
 支持模型:
 - Kokoro
+
+## 版本
+
+API 版本: 1.0.0，通过 `AX_TTS_GetVersion()` 获取。
 
 ## 文档目录  
 - [目录结构](#目录结构)
@@ -52,7 +59,38 @@ ax_tts_api/
 
 可从Release页面下载预编译库  
 
-使用示例: [test_kokoro](cpp/tests/test_kokoro.cpp)
+C API 使用示例:
+
+```c
+#include "ax_tts_api.h"
+
+int main() {
+    AX_TTS_INIT_CONFIG init_cfg = {
+        .max_seq_len = 96,
+        .model_path = "models-ax650",
+        .espeak_data_path = "espeak-ng-data",
+        .jieba_dict_path = "dict",
+    };
+
+    AX_TTS_HANDLE handle = NULL;
+    AX_TTS_ERROR_E err = AX_TTS_Init(AX_KOKORO, &init_cfg, &handle);
+    if (err != AX_TTS_OK) return -1;
+
+    AX_TTS_RUN_CONFIG run_cfg = {
+        .speed = 1.0f, .fade_out = 0.3f, .sample_rate = 24000,
+        .voice = "af_heart", .language = "en",
+    };
+    AX_TTS_AUDIO* audio = NULL;
+    err = AX_TTS_Run(handle, "Hello world", &run_cfg, &audio);
+    if (err != AX_TTS_OK) { free(audio); return -1; }
+
+    // 使用 audio->data (float array) ...
+    free(audio);
+    AX_TTS_Uninit(handle);
+}
+```
+
+完整示例: [test_kokoro](cpp/tests/test_kokoro.cpp)
 
 ## 下载模型
 
@@ -136,7 +174,7 @@ bash download_bsp.sh
 
  - AX8850
  ```bash
- bash build_ax8850_aarch64.sh.sh
+ bash build_ax8850_aarch64.sh
  ```
   编译完成后的产物在install/ax8850_aarch64下
 
@@ -235,17 +273,31 @@ options:
 
 ```
 
-### 服务端(asr_server)
 ### 服务端(tts_server)
+
+OpenAI-Compatible API:
 
 ```
 ./install/ax8850_aarch64/tts_server --port 8080
 
 ```
 
+```bash
+# 标准 OpenAI SDK 调用 (Python)
+from openai import OpenAI
+client = OpenAI(base_url="http://10.126.33.140:8080/v1", api_key="not-needed")
+response = client.audio.speech.create(
+    model="tts-1",
+    voice="af_heart",
+    input="Hello world!",
+    response_format="wav"
+)
+response.stream_to_file("output.wav")
+```
+
 Usage:  
 ```
-usage: ./install/ax650/tts_server [options] ...
+usage: ./install/ax8850_aarch64/tts_server [options] ...
 options:
   -p, --port          On which port to run the server (int [=8080])
   -m, --model_path    model path which contains axmodel (string [=./models-ax650])
@@ -254,16 +306,41 @@ options:
 
 ```
 
+### OpenAI 兼容性
+
+完全兼容 OpenAI `POST /v1/audio/speech` API，支持字段:
+
+| 字段 | 说明 |
+|---|---|
+| `model` | `"tts-1"` (kokoro) / `"tts-1-hd"` (melotts)，也可用内部名 `"kokoro"` / `"melotts"` |
+| `input` | 输入文本 (UTF-8)，最长 4096 字符 |
+| `voice` | 音色名，支持 OpenAI 名称 (alloy/echo/fable/onyx/nova/shimmer) 和内部分类名 (af_heart/zf_xiaoxiao/jf_gongitsune) |
+| `speed` | 语速 0.25–4.0，默认 1.0 |
+| `response_format` | `"wav"` (默认) / `"pcm"` (raw float32) |
+| `instructions` | 可选，接受 `"en"`/`"zh"`/`"ja"` 覆盖语言推断 |
+
+语言从 voice 前缀自动推断：af_* → en，zf_* → zh，jf_* → ja。
+
 ### 客户端
 
 #### Python
 
 ```
 cd scripts
-pip install openai
-python test_tts_server.py --ip 10.126.33.140 --port 8080 -t "Hello, World" --output test_en
+pip install openai numpy
+python test_tts_server.py
 ```
-Check python test_tts_server.py --help for help.  
+
+或直接用 OpenAI SDK:
+
+```python
+from openai import OpenAI
+client = OpenAI(base_url="http://IP:8080/v1", api_key="not-needed")
+with client.audio.speech.with_streaming_response.create(
+    model="tts-1", voice="alloy", input="Hello world!"
+) as resp:
+    resp.stream_to_file("output.wav")
+```
 
 #### 目标设备冒烟测试（无需 ctest）
 
@@ -339,8 +416,33 @@ RTF(0.37 / 4.22) = 0.0880
 
 ## 集成
 
-C++: 编译产物包含 include/ax_tts_api.h 和 lib/libax_tts_api.so  
+C API: 编译产物包含 include/ax_tts_api.h 和 lib/libax_tts_api.so  
 Python: `pip install` 后 `from ax_tts import AX_TTS`
+
+### 错误码
+
+| 错误码 | 值 | 说明 |
+|---|---|---|
+| AX_TTS_OK | 0 | 成功 |
+| AX_TTS_ERR_NULL_HANDLE | -1 | handle 为 NULL |
+| AX_TTS_ERR_NULL_CONFIG | -2 | config 为 NULL |
+| AX_TTS_ERR_NULL_INPUT | -3 | 输入文本为 NULL 或空 |
+| AX_TTS_ERR_INVALID_MODEL_PATH | -4 | 模型路径无效 |
+| AX_TTS_ERR_MODEL_LOAD_FAILED | -5 | 模型加载失败 |
+| AX_TTS_ERR_INFERENCE_FAILED | -6 | 推理执行失败 |
+| AX_TTS_ERR_INVALID_LANGUAGE | -7 | 不支持的语言 |
+| AX_TTS_ERR_OUT_OF_MEMORY | -8 | 内存不足 |
+| AX_TTS_ERR_UNKNOWN_MODEL | -9 | 未知模型类型 |
+| AX_TTS_ERR_FRONTEND_FAILED | -10 | 前端处理失败 |
+| AX_TTS_ERR_INTERNAL | -100 | 内部错误 |
+
+### API 变更记录 (v1.0.0)
+
+- 配置结构体改用 `const char*` 指针，移除固定大小 `char[N]` 限制
+- `AX_TTS_INIT_CONFIG` 移除无效字段 `language`
+- `AX_TTS_Init` 返回值改为 `AX_TTS_ERROR_E`，通过输出参数返回 handle
+- `AX_TTS_Run` 返回值改为 `AX_TTS_ERROR_E`
+- 新增 `AX_TTS_GetVersion()` 获取 API 版本
 
 ## 讨论
 

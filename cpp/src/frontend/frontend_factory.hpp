@@ -17,7 +17,7 @@
 
 class FrontendFactory {
 public:
-    static std::shared_ptr<TTSFrontend> create(AX_TTS_TYPE_E tts_type, AX_TTS_INIT_CONFIG* config) {
+    static std::shared_ptr<TTSFrontend> create(AX_TTS_TYPE_E tts_type, const AX_TTS_INIT_CONFIG* config) {
         std::shared_ptr<TTSFrontend> interface = nullptr;
         
         switch (tts_type)
