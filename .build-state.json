@@ -1,0 +1,65 @@
+{
+  "goal": "把C++部分搬到cpp文件夹，然后建一个python文件夹，里面做pybind绑定C++部分实现API",
+  "stack": "CMake/C++/Python-pybind11",
+  "base_branch": "main",
+  "branch": "feat/build-20260707-01",
+  "iteration": 2,
+  "validation_command": "cd cpp && cmake -S . -B ../build_test -DCHIP_AX8850=ON -DCMAKE_TOOLCHAIN_FILE=../toolchains/aarch64-none-linux-gnu.toolchain.cmake -DBUILD_SERVER=OFF -DBUILD_TESTS=OFF && cmake --build ../build_test -j4",
+  "requirement_alignment": {
+    "goal": "把C++部分搬到cpp文件夹，然后建一个python文件夹，里面做pybind绑定C++部分实现API",
+    "non_goals": [],
+    "cpp_move_list": ["src/", "main.cpp", "server/", "tests/", "CMakeLists.txt", "cmake/", "third_party/"],
+    "keep_at_root": ["dict/", "espeak-ng-data/", "models-*", "scripts/", "build_*.sh", "toolchains/", "install/", "download_*.sh", "*.wav", "ax620e_bsp_sdk", "ax650n_bsp_sdk", "axcl_bsp_sdk"],
+    "python_class": "AX_TTS",
+    "python_return": "numpy array (sample_rate, numpy_array)",
+    "python_build": "pyproject.toml + setuptools + pybind11",
+    "api_scope": "only public C API (AX_TTS_Init, AX_TTS_Run, AX_TTS_Uninit + structs)",
+    "iterations": [
+      "迭代1: 创建cpp/，搬移C++文件，修复CMakeLists.txt路径，确保编译通过",
+      "迭代2: 创建python/，写pybind11绑定 + pyproject.toml，确保pip install能构建",
+      "迭代3: Python smoke test，验证AX_TTS类能正常调用"
+    ]
+  },
+  "issues": [
+    {
+      "number": 5,
+      "title": "feat[1]: 创建cpp/目录，搬移C++源文件、CMake、server、tests",
+      "acceptance_checks": [
+        "CMake 配置成功: cmake -S cpp -B build_test ...",
+        "编译通过: cmake --build build_test",
+        "构建脚本 build_*.sh 中 cmake 路径更新为引用 cpp/"
+      ]
+    }
+  ],
+  "rounds": [
+    {
+      "iteration": 1,
+      "issue": 5,
+      "changed_files": [
+        "cpp/ (all C++ files moved from root)",
+        "cpp/cmake/msp_dependencies.cmake (BSP paths updated with ../)",
+        "build_620qp.sh, build_ax620q.sh, build_ax630c.sh, build_ax650.sh, build_ax8850_aarch64.sh"
+      ],
+      "validation": {
+        "command": "cmake -S cpp -B build_test -DCHIP_AX8850=ON -DCMAKE_TOOLCHAIN_FILE=../toolchains/aarch64-none-linux-gnu.toolchain.cmake && cmake --build build_test -j4",
+        "result": "pass",
+        "evidence": "CMake configure OK, libax_tts_api.a and main built successfully"
+      },
+      "status": "complete"
+    }
+  ],
+  "pre_existing_changes": [
+    "?? ax_run_model/",
+    "?? axcl_bsp_sdk/",
+    "?? build_ax8850_aarch64/",
+    "?? en.wav",
+    "?? scripts/output.wav",
+    "?? scripts/test_en.wav",
+    "?? test_en.wav",
+    "?? test_zh.wav"
+  ],
+  "assumptions": [
+    "aarch64 cross-compilation toolchain is available for build validation",
+    "pybind11 will be installed via pip in iteration 2"
+  ]
+}
