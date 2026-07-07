@@ -35,10 +35,6 @@ static std::string pick_path(const char* env_var, const char* default_rel) {
     return std::string(default_rel);
 }
 
-static bool path_fits_config(const std::string& p) {
-    return p.size() < AX_TTS_MAX_STR_LEN;
-}
-
 static bool is_jp_kana_only(const std::string& s) {
     auto is_kana_or_allowed = [](uint32_t cp) {
         // whitespace
@@ -264,24 +260,19 @@ void TTSServer::setup_routes_() {
         else
             run_config.sample_rate = 44100;
 
-        snprintf(run_config.language, AX_TTS_MAX_STR_LEN, "%s", language.c_str());
-        if (!voice.empty()) {
-            snprintf(run_config.voice, AX_TTS_MAX_STR_LEN, "%s", voice.c_str());
-        } else if (language == "ja") {
-            snprintf(run_config.voice, AX_TTS_MAX_STR_LEN, "%s", "jf_gongitsune");
-        } else if (language == "zh") {
-            snprintf(run_config.voice, AX_TTS_MAX_STR_LEN, "%s", "zf_xiaoxiao");
-        } else {
-            snprintf(run_config.voice, AX_TTS_MAX_STR_LEN, "%s", "af_heart");
+        std::string voice_str = voice;
+        if (voice_str.empty()) {
+            if (language == "ja") voice_str = "jf_gongitsune";
+            else if (language == "zh") voice_str = "zf_xiaoxiao";
+            else voice_str = "af_heart";
         }
+        run_config.language = language.c_str();
+        run_config.voice = voice_str.c_str();
 
         AX_TTS_AUDIO* audio = NULL;
-        int ret = AX_TTS_Run(handle, 
-                    input_text.c_str(), 
-                    &run_config,
-                    &audio); 
-        if (ret != 0) {
-            ALOGE("AX_TTS_Run failed!");
+        AX_TTS_ERROR_E err = AX_TTS_Run(handle, input_text.c_str(), &run_config, &audio);
+        if (err != AX_TTS_OK) {
+            ALOGE("AX_TTS_Run failed! err=%d", err);
             free(audio);
             ErrorResponse openai_res(OPENAI_ERR_INTERNAL_SERVER_ERROR, "AX_TTS_Run failed!", "");
             openai_res.to_res(res);
@@ -361,33 +352,27 @@ AX_TTS_HANDLE TTSServer::load_tts_(const std::string& model_name) {
         ALOGI("Initializing %s ...", model_name.c_str());
 
         AX_TTS_INIT_CONFIG init_config;
+        std::string espeak_path;
+        std::string jieba_path;
         if (AX_KOKORO == tts_type) {
             init_config.max_seq_len = 96;
-            snprintf(init_config.model_path, AX_TTS_MAX_STR_LEN, "%s", model_path_.c_str());
-
-            std::string espeak_path = espeak_data_path_.empty()
+            espeak_path = espeak_data_path_.empty()
                 ? pick_path("AX_TTS_ESPEAK_DATA_PATH", "espeak-ng-data")
                 : espeak_data_path_;
-            std::string jieba_path = jieba_dict_path_.empty()
+            jieba_path = jieba_dict_path_.empty()
                 ? pick_path("AX_TTS_JIEBA_DICT_PATH", "dict")
                 : jieba_dict_path_;
-
-            if (!path_fits_config(espeak_path) || !path_fits_config(jieba_path) || !path_fits_config(model_path_)) {
-                ALOGE("Path too long for AX_TTS_MAX_STR_LEN. model=%s espeak=%s jieba=%s",
-                      model_path_.c_str(), espeak_path.c_str(), jieba_path.c_str());
-                return nullptr;
-            }
-
-            snprintf(init_config.espeak_data_path, AX_TTS_MAX_STR_LEN, "%s", espeak_path.c_str());
-            snprintf(init_config.jieba_dict_path, AX_TTS_MAX_STR_LEN, "%s", jieba_path.c_str());
+            init_config.espeak_data_path = espeak_path.c_str();
+            init_config.jieba_dict_path = jieba_path.c_str();
         } else if (AX_MELOTTS == tts_type) {
             init_config.max_seq_len = 128;
-            snprintf(init_config.model_path, AX_TTS_MAX_STR_LEN, "%s", model_path_.c_str());
         }
+        init_config.model_path = model_path_.c_str();
         
-        AX_TTS_HANDLE new_handle = AX_TTS_Init(tts_type, &init_config);
-        if (!new_handle) {
-            ALOGE("AX_TTS_Init failed!");
+        AX_TTS_HANDLE new_handle = NULL;
+        AX_TTS_ERROR_E err = AX_TTS_Init(tts_type, &init_config, &new_handle);
+        if (err != AX_TTS_OK) {
+            ALOGE("AX_TTS_Init failed! err=%d", err);
             return nullptr;
         }
 

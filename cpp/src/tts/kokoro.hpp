@@ -20,9 +20,9 @@ public:
     
     ~Kokoro();
 
-    bool init(AX_TTS_TYPE_E tts_type, AX_TTS_INIT_CONFIG* init_config);
+    bool init(AX_TTS_TYPE_E tts_type, const std::string& model_path, const AX_TTS_INIT_CONFIG* init_config);
     void uninit(void);
-    bool run(const std::string& text, AX_TTS_RUN_CONFIG* run_config, AX_TTS_AUDIO** audio);
+    bool run(const std::string& text, const AX_TTS_RUN_CONFIG* run_config, AX_TTS_AUDIO** audio);
 
 private:
     bool load_vocab_(const std::string& vocab_path);

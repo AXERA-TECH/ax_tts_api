@@ -45,38 +45,31 @@ int main(int argc, char** argv) {
     else if (language == "zh")   voice = "zf_xiaoxiao";
     else    voice = "af_heart";
 
-    AX_TTS_INIT_CONFIG init_config;
-    init_config.max_seq_len = 96;
+    std::string model_path;
 #if defined(CHIP_AX650) || defined(CHIP_AX8850)    
-    std::string model_path = "models-ax650";
+    model_path = "models-ax650";
 #else
-    std::string model_path = "models-ax630c";
+    model_path = "models-ax630c";
 #endif
     if (!cmd.get<std::string>("model_path").empty()) {
         model_path = cmd.get<std::string>("model_path");
     }
-    if (model_path.size() >= AX_TTS_MAX_STR_LEN) {
-        ALOGE("model_path too long for AX_TTS_MAX_STR_LEN");
-        return -1;
-    }
-    snprintf(init_config.model_path, AX_TTS_MAX_STR_LEN, "%s", model_path.c_str());
 
-    std::string espeak_path = cmd.get<std::string>("espeak_data_path");
-    if (espeak_path.empty()) espeak_path = pick_path("AX_TTS_ESPEAK_DATA_PATH", "espeak-ng-data");
-    std::string jieba_path = cmd.get<std::string>("jieba_dict_path");
-    if (jieba_path.empty()) jieba_path = pick_path("AX_TTS_JIEBA_DICT_PATH", "dict");
+    std::string espeak_data_path = cmd.get<std::string>("espeak_data_path");
+    if (espeak_data_path.empty()) espeak_data_path = pick_path("AX_TTS_ESPEAK_DATA_PATH", "espeak-ng-data");
+    std::string jieba_dict_path = cmd.get<std::string>("jieba_dict_path");
+    if (jieba_dict_path.empty()) jieba_dict_path = pick_path("AX_TTS_JIEBA_DICT_PATH", "dict");
 
-    if (espeak_path.size() >= AX_TTS_MAX_STR_LEN || jieba_path.size() >= AX_TTS_MAX_STR_LEN) {
-        ALOGE("espeak/jieba path too long for AX_TTS_MAX_STR_LEN");
-        return -1;
-    }
+    AX_TTS_INIT_CONFIG init_config;
+    init_config.max_seq_len = 96;
+    init_config.model_path = model_path.c_str();
+    init_config.espeak_data_path = espeak_data_path.c_str();
+    init_config.jieba_dict_path = jieba_dict_path.c_str();
 
-    snprintf(init_config.espeak_data_path, AX_TTS_MAX_STR_LEN, "%s", espeak_path.c_str());
-    snprintf(init_config.jieba_dict_path, AX_TTS_MAX_STR_LEN, "%s", jieba_path.c_str());
-
-    AX_TTS_HANDLE handle = AX_TTS_Init(AX_KOKORO, &init_config);
-    if (!handle) {
-        ALOGE("AX_TTS_Init failed!");
+    AX_TTS_HANDLE handle = NULL;
+    AX_TTS_ERROR_E err = AX_TTS_Init(AX_KOKORO, &init_config, &handle);
+    if (err != AX_TTS_OK) {
+        ALOGE("AX_TTS_Init failed! err=%d", err);
         return -1;
     }
 
@@ -84,16 +77,13 @@ int main(int argc, char** argv) {
     run_config.fade_out = 0.3f;
     run_config.speed = 1.0f;
     run_config.sample_rate = 24000;
-    snprintf(run_config.language, AX_TTS_MAX_STR_LEN, "%s", language.c_str());
-    snprintf(run_config.voice, AX_TTS_MAX_STR_LEN, "%s", voice.c_str());
+    run_config.language = language.c_str();
+    run_config.voice = voice.c_str();
 
     AX_TTS_AUDIO* audio = NULL;
-    int ret = AX_TTS_Run(handle, 
-                   input_text.c_str(), 
-                   &run_config,
-                   &audio); 
-    if (ret != 0) {
-        ALOGE("AX_TTS_Run failed!");
+    err = AX_TTS_Run(handle, input_text.c_str(), &run_config, &audio);
+    if (err != AX_TTS_OK) {
+        ALOGE("AX_TTS_Run failed! err=%d", err);
         free(audio);
         return -1;
     }
@@ -111,7 +101,7 @@ int main(int argc, char** argv) {
     free(audio);
 
     printf("================================\n");
-    printf("test_zh:\n");
+    printf("%s:\n", language.c_str());
     printf("input text: %s\n", input_text.c_str());
     printf("output duration: %.2f seconds\n", audio_file.getNumSamplesPerChannel() * 1.0f / run_config.sample_rate);
     printf("output file: %s\n", output.c_str());

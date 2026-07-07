@@ -22,7 +22,7 @@ public:
     KokoroFrontend();
     ~KokoroFrontend();
 
-    bool init(AX_TTS_INIT_CONFIG* config);
+    bool init(const AX_TTS_INIT_CONFIG* config);
     std::vector<int> run(const std::string& input_text, const std::string& language, const std::map<std::string, int>& vocab, int& err);
 
 private:

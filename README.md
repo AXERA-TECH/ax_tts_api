@@ -10,6 +10,10 @@ C++ TTS API on Axera platforms with Python bindings.
 支持模型:
 - Kokoro
 
+## 版本
+
+API 版本: 1.0.0，通过 `AX_TTS_GetVersion()` 获取。
+
 ## 文档目录  
 - [目录结构](#目录结构)
 - [快速开始](#快速开始)  
@@ -52,7 +56,38 @@ ax_tts_api/
 
 可从Release页面下载预编译库  
 
-使用示例: [test_kokoro](cpp/tests/test_kokoro.cpp)
+C API 使用示例:
+
+```c
+#include "ax_tts_api.h"
+
+int main() {
+    AX_TTS_INIT_CONFIG init_cfg = {
+        .max_seq_len = 96,
+        .model_path = "models-ax650",
+        .espeak_data_path = "espeak-ng-data",
+        .jieba_dict_path = "dict",
+    };
+
+    AX_TTS_HANDLE handle = NULL;
+    AX_TTS_ERROR_E err = AX_TTS_Init(AX_KOKORO, &init_cfg, &handle);
+    if (err != AX_TTS_OK) return -1;
+
+    AX_TTS_RUN_CONFIG run_cfg = {
+        .speed = 1.0f, .fade_out = 0.3f, .sample_rate = 24000,
+        .voice = "af_heart", .language = "en",
+    };
+    AX_TTS_AUDIO* audio = NULL;
+    err = AX_TTS_Run(handle, "Hello world", &run_cfg, &audio);
+    if (err != AX_TTS_OK) { free(audio); return -1; }
+
+    // 使用 audio->data (float array) ...
+    free(audio);
+    AX_TTS_Uninit(handle);
+}
+```
+
+完整示例: [test_kokoro](cpp/tests/test_kokoro.cpp)
 
 ## 下载模型
 
@@ -339,8 +374,33 @@ RTF(0.37 / 4.22) = 0.0880
 
 ## 集成
 
-C++: 编译产物包含 include/ax_tts_api.h 和 lib/libax_tts_api.so  
+C API: 编译产物包含 include/ax_tts_api.h 和 lib/libax_tts_api.so  
 Python: `pip install` 后 `from ax_tts import AX_TTS`
+
+### 错误码
+
+| 错误码 | 值 | 说明 |
+|---|---|---|
+| AX_TTS_OK | 0 | 成功 |
+| AX_TTS_ERR_NULL_HANDLE | -1 | handle 为 NULL |
+| AX_TTS_ERR_NULL_CONFIG | -2 | config 为 NULL |
+| AX_TTS_ERR_NULL_INPUT | -3 | 输入文本为 NULL 或空 |
+| AX_TTS_ERR_INVALID_MODEL_PATH | -4 | 模型路径无效 |
+| AX_TTS_ERR_MODEL_LOAD_FAILED | -5 | 模型加载失败 |
+| AX_TTS_ERR_INFERENCE_FAILED | -6 | 推理执行失败 |
+| AX_TTS_ERR_INVALID_LANGUAGE | -7 | 不支持的语言 |
+| AX_TTS_ERR_OUT_OF_MEMORY | -8 | 内存不足 |
+| AX_TTS_ERR_UNKNOWN_MODEL | -9 | 未知模型类型 |
+| AX_TTS_ERR_FRONTEND_FAILED | -10 | 前端处理失败 |
+| AX_TTS_ERR_INTERNAL | -100 | 内部错误 |
+
+### API 变更记录 (v1.0.0)
+
+- 配置结构体改用 `const char*` 指针，移除固定大小 `char[N]` 限制
+- `AX_TTS_INIT_CONFIG` 移除无效字段 `language`
+- `AX_TTS_Init` 返回值改为 `AX_TTS_ERROR_E`，通过输出参数返回 handle
+- `AX_TTS_Run` 返回值改为 `AX_TTS_ERROR_E`
+- 新增 `AX_TTS_GetVersion()` 获取 API 版本
 
 ## 讨论
 

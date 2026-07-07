@@ -34,11 +34,9 @@ public:
         uninit();
     }
 
-    bool init(AX_TTS_TYPE_E tts_type, AX_TTS_INIT_CONFIG* init_config) {
+    bool init(AX_TTS_TYPE_E tts_type, const std::string& model_path, const AX_TTS_INIT_CONFIG* init_config) {
         max_phone_len_ = init_config->max_seq_len;
         max_dur_per_phone_ = 4;
-
-        std::string model_path(init_config->model_path);
 
         if (!load_models_(model_path)) {
             ALOGE("Load models failed!");
@@ -55,7 +53,7 @@ public:
         decoder_.unload_model();
     }
 
-    bool run(const std::string& text, AX_TTS_RUN_CONFIG* config, AX_TTS_AUDIO** audio) {
+    bool run(const std::string& text, const AX_TTS_RUN_CONFIG* config, AX_TTS_AUDIO** audio) {
         if (!run_models_()) {
             ALOGE("Run models failed!");
             return false;
@@ -186,14 +184,14 @@ MeloTTS::~MeloTTS() {
     uninit();
 }
 
-bool MeloTTS::init(AX_TTS_TYPE_E tts_type, AX_TTS_INIT_CONFIG* init_config) {
-    return impl_->init(tts_type, init_config);
+bool MeloTTS::init(AX_TTS_TYPE_E tts_type, const std::string& model_path, const AX_TTS_INIT_CONFIG* init_config) {
+    return impl_->init(tts_type, model_path, init_config);
 }
 
 void MeloTTS::uninit(void) {
     impl_.reset();
 }
 
-bool MeloTTS::run(const std::string& text, AX_TTS_RUN_CONFIG* config, AX_TTS_AUDIO** audio) {
+bool MeloTTS::run(const std::string& text, const AX_TTS_RUN_CONFIG* config, AX_TTS_AUDIO** audio) {
     return impl_->run(text, config, audio);
 }

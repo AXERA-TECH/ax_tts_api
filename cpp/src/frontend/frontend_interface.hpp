@@ -33,6 +33,6 @@ public:
     TTSFrontend() = default;
     ~TTSFrontend() = default;
 
-    virtual bool init(AX_TTS_INIT_CONFIG* config) = 0;
+    virtual bool init(const AX_TTS_INIT_CONFIG* config) = 0;
     virtual std::vector<int> run(const std::string& input_text, const std::string& language, const std::map<std::string, int>& vocab, int& err) = 0;
 };

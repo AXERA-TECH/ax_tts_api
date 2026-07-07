@@ -36,9 +36,9 @@ class AX_TTS:
         config.espeak_data_path = espeak_data_path
         config.jieba_dict_path = jieba_dict_path
 
-        self._handle = _ax_tts_core.init(tts_type_enum, config)
-        if not self._handle:
-            raise RuntimeError("AX_TTS_Init failed")
+        err, self._handle = _ax_tts_core.init(tts_type_enum, config)
+        if err != _ax_tts_core.ErrorCode.OK:
+            raise RuntimeError(f"AX_TTS_Init failed with error {err}")
 
     def synthesize(
         self,
