@@ -1,5 +1,5 @@
 # ax_tts_api
-C++ TTS API on Axera platforms
+C++ TTS API on Axera platforms with Python bindings.
 
 支持平台:  
  - AX650
@@ -8,12 +8,14 @@ C++ TTS API on Axera platforms
  - AX8850
 
 支持模型:
- - Kokoro
+- Kokoro
 
 ## 文档目录  
+- [目录结构](#目录结构)
 - [快速开始](#快速开始)  
 - [下载模型](#下载模型)  
 - [编译](#编译)  
+- [Python 绑定](#python-绑定)
 - [测试](#测试)  
 - [性能表现](#性能表现)  
 - [集成](#集成)  
@@ -21,11 +23,36 @@ C++ TTS API on Axera platforms
 
 ## 更新
 
+## 目录结构
+
+```
+ax_tts_api/
+├── cpp/                    # C++ 源码、CMake、server、tests
+│   ├── CMakeLists.txt
+│   ├── main.cpp
+│   ├── src/api/            # 公开 C API
+│   ├── server/             # HTTP 服务端
+│   ├── tests/              # C++ 单元测试
+│   ├── cmake/              # CMake 模块
+│   └── third_party/        # 第三方库
+├── python/                 # Python pybind11 绑定
+│   ├── CMakeLists.txt
+│   ├── pyproject.toml
+│   ├── src/bindings.cpp    # C++ 绑定代码
+│   ├── src/ax_tts/         # AX_TTS Python 包
+│   └── tests/              # Python smoke test
+├── dict/                   # jieba 词典
+├── espeak-ng-data/         # espeak 语音数据
+├── models-*/               # 模型文件
+├── build_*.sh              # 构建脚本
+└── toolchains/             # 交叉编译工具链
+```
+
 ## 快速开始
 
 可从Release页面下载预编译库  
 
-使用示例: [test_kokoro](tets/test_kokoro.cpp)
+使用示例: [test_kokoro](cpp/tests/test_kokoro.cpp)
 
 ## 下载模型
 
@@ -80,6 +107,8 @@ bash download_bsp.sh
 
 ### 交叉编译
 
+所有构建脚本已更新为从 `cpp/` 目录编译。
+
  - AX650
  ```bash
  bash build_ax650.sh
@@ -118,7 +147,7 @@ bash download_bsp.sh
 ### 其它编译选项
 
  - BUILD_TESTS 默认OFF  
- 负责编译tests目录下的单元测试，可执行程序生成在install/ax650或install/ax630c下  
+ 负责编译 cpp/tests 目录下的单元测试，可执行程序生成在 install/ax650 或 install/ax630c 下  
  ```bash
  bash build_ax650.sh -DBUILD_TESTS=ON
  ```
@@ -129,11 +158,62 @@ bash download_bsp.sh
   bash build_ax650.sh -DLOG_LEVEL_DEBUG=ON
   ```    
 
-  - BUILD_SERVER 默认ON   
-  编译asr_server  
-  ```bash
-  bash build_ax650.sh -DBUILD_SERVER=ON
-  ```    
+ - BUILD_SERVER 默认ON   
+ 编译 tts_server  
+ ```bash
+ bash build_ax650.sh -DBUILD_SERVER=ON
+ ```    
+
+- BUILD_PYTHON_BINDINGS 默认OFF  
+ 编译 Python pybind11 绑定模块（需要 pybind11）  
+ ```bash
+ bash build_ax650.sh -DBUILD_PYTHON_BINDINGS=ON
+ ```
+
+## Python 绑定
+
+### 构建
+
+```bash
+bash build_ax650.sh -DBUILD_PYTHON_BINDINGS=ON
+```
+
+编译产物 `_ax_tts_core*.so` 生成在 install 目录下。
+
+### 安装
+
+```bash
+cd python && pip install -e .
+```
+
+### 使用
+
+```python
+from ax_tts import AX_TTS
+
+# 初始化
+tts = AX_TTS(model_path="models-ax650", espeak_data_path="espeak-ng-data")
+
+# 合成语音，返回 (sample_rate, numpy float32 array)
+sr, audio = tts.synthesize("Hello world", language="en", voice="af_heart")
+
+# 也支持上下文管理器
+with AX_TTS() as tts:
+    sr, audio = tts.synthesize("你好世界", language="zh", voice="zf_xiaoxiao")
+
+# 手动释放
+tts.close()
+```
+
+### Smoke test
+
+```bash
+# 静态检查（x86 主机可运行）
+python -m pytest python/tests/test_smoke.py -v -k static
+
+# 完整功能测试（需在目标设备上运行）
+python -m pytest python/tests/test_smoke.py -v
+```
 
 ## 测试
 
@@ -156,6 +236,7 @@ options:
 ```
 
 ### 服务端(asr_server)
+### 服务端(tts_server)
 
 ```
 ./install/ax8850_aarch64/tts_server --port 8080
@@ -210,7 +291,7 @@ cd scripts
 
 ### 单元测试
 
-以下为tests下单元测试的使用示例和说明:
+以下为 cpp/tests 下单元测试的使用示例和说明:
 
 - test_kokoro: 加载kokoro模型，测试中英文的生成结果
 
@@ -258,14 +339,13 @@ RTF(0.37 / 4.22) = 0.0880
 
 ## 集成
 
-编译产物包含 include/ax_tts_api.h 和 lib/libax_tts_api.so
+C++: 编译产物包含 include/ax_tts_api.h 和 lib/libax_tts_api.so  
+Python: `pip install` 后 `from ax_tts import AX_TTS`
 
 ## 讨论
 
- - Github issues
- - QQ 群: 139953715
-
-## 贡献
+- Github issues
+- QQ 群: 139953715
 
 ## License
 
