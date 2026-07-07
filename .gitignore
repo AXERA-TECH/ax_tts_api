@@ -8,4 +8,5 @@ install
 .vscode
 models-*
 
-ja_voices_630c
+ja_voices_630cbuild_test/
+__pycache__/
