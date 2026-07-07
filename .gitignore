@@ -9,3 +9,4 @@ install
 models-*
 
 ja_voices_630cbuild_test/
+__pycache__/

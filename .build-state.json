@@ -3,7 +3,7 @@
   "stack": "CMake/C++/Python-pybind11",
   "base_branch": "main",
   "branch": "feat/build-20260707-01",
-  "iteration": 3,
+  "iteration": 4,
   "validation_command": "cd cpp && cmake -S . -B ../build_test -DCHIP_AX8850=ON -DCMAKE_TOOLCHAIN_FILE=../toolchains/aarch64-none-linux-gnu.toolchain.cmake -DBUILD_SERVER=OFF -DBUILD_TESTS=OFF && cmake --build ../build_test -j4",
   "requirement_alignment": {
     "goal": "把C++部分搬到cpp文件夹，然后建一个python文件夹，里面做pybind绑定C++部分实现API",
@@ -59,6 +59,15 @@
         "import ax_tts 可导入",
         "AX_TTS 类可实例化"
       ]
+    },
+    {
+      "number": 7,
+      "title": "feat[3]: Python smoke test，验证AX_TTS类接口",
+      "acceptance_checks": [
+        "Python 文件语法正确",
+        "包结构可被 Python 发现",
+        "AX_TTS 类接口与 C API 一致"
+      ]
     }
   ],
   "rounds": [
@@ -91,6 +100,19 @@
         "command": "cmake -S cpp -B build_test -DBUILD_PYTHON_BINDINGS=ON ... && cmake --build build_test -j4",
         "result": "pass",
         "evidence": "CMake configure OK, _ax_tts_core.so built for aarch64"
+      },
+      "status": "complete"
+    },
+    {
+      "iteration": 3,
+      "issue": 7,
+      "changed_files": [
+        "python/tests/test_smoke.py"
+      ],
+      "validation": {
+        "command": "python -m pytest python/tests/test_smoke.py -v -k static",
+        "result": "pass",
+        "evidence": "6/6 static tests passed"
       },
       "status": "complete"
     }
