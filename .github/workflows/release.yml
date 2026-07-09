@@ -97,6 +97,10 @@ jobs:
         run: |
           cp build/python/_ax_tts_core.*.so python/src/ax_tts/ 2>/dev/null || \
           cp build/python/_ax_tts_core.so python/src/ax_tts/
+          # Rename to drop host ABI tag (says x86_64 but binary is aarch64)
+          for f in python/src/ax_tts/_ax_tts_core*.so; do
+            [ -f "$f" ] && mv "$f" python/src/ax_tts/_ax_tts_core.so
+          done
 
       - name: Update version in pyproject.toml
         if: matrix.chip == 'AX650'
