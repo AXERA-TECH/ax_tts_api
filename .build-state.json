@@ -59,5 +59,6 @@
     "pybind11 在 CI 中通过 pip install 可用",
     "GITHUB_TOKEN 已默认可用，用于创建 Release",
     "python -m build 需在 CI 中安装"
-  ]
+  ],
+  "pr_url": "https://github.com/AXERA-TECH/ax_tts_api/pull/11"
 }
