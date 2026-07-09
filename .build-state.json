@@ -2,8 +2,8 @@
   "goal": "构建 Python wheel 包 + C++ 库/二进制，通过 v* tag 触发 GitHub Actions 发布到 GitHub Releases",
   "stack": "CMake/C++/Python-pybind11",
   "base_branch": "main",
-  "branch": "feat/build-20260709-2307",
-  "iteration": 3,
+  "branch": "feat/build-20260709-2312",
+  "iteration": 4,
   "validation_command": "python3 -c 'import yaml; yaml.safe_load(open(\".github/workflows/release.yml\"))' && python -m pytest python/tests/test_smoke.py -v -k static",
   "requirement_alignment": {
     "goal": "构建 Python wheel 包 + C++ 库/二进制，通过 v* tag 触发 GitHub Actions 发布到 GitHub Releases",
@@ -25,10 +25,11 @@
   },
   "issues": [
     {
-      "number": 14,
-      "title": "feat[3]: 修复 AX650 cmake 找不到 pybind11（交叉编译路径问题）",
+      "number": 15,
+      "title": "feat[4]: 修复 Release 403 权限 + wheel glob 路径",
       "acceptance_checks": [
-        "AX650 job cmake configure 成功",
+        "GITHUB_TOKEN 有 contents: write",
+        "wheel 文件能被 glob 匹配",
         "YAML 语法正确"
       ]
     }

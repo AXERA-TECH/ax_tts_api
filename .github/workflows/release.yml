@@ -5,6 +5,9 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+
 jobs:
   # ============================================================
   # aarch64 交叉编译 (AX650 / AX630C / AX8850)
@@ -148,7 +151,11 @@ jobs:
           merge-multiple: true
 
       - name: List artifacts
-        run: find artifacts -type f | sort
+        run: |
+          echo '=== Artifacts tree ==='
+          find artifacts -type f | sort
+          echo '=== ls -R ==='
+          ls -laR artifacts/
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -175,7 +182,7 @@ jobs:
             pip install ax_tts-*.whl
             ```
           files: |
-            artifacts/*.tar.gz
-            artifacts/wheels/*.whl
+            artifacts/**/*.tar.gz
+            artifacts/**/*.whl
           draft: false
           prerelease: false
