@@ -41,11 +41,13 @@ jobs:
         uses: lukka/get-cmake@latest
 
       - name: Setup Python
+        if: matrix.chip == 'AX650'
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
       - name: Install Python build deps
+        if: matrix.chip == 'AX650'
         run: |
           python -m pip install --upgrade pip
           pip install pybind11 numpy build setuptools wheel
@@ -77,20 +79,23 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_SERVER=ON \
             -DBUILD_TESTS=OFF \
-            -DBUILD_PYTHON_BINDINGS=ON
+            -DBUILD_PYTHON_BINDINGS=${{ matrix.chip == 'AX650' && 'ON' || 'OFF' }}
           make -j$(nproc)
           make install
 
       - name: Copy _ax_tts_core.so into Python package
+        if: matrix.chip == 'AX650'
         run: |
           cp build/python/_ax_tts_core.*.so python/src/ax_tts/ 2>/dev/null || \
           cp build/python/_ax_tts_core.so python/src/ax_tts/
 
       - name: Update version in pyproject.toml
+        if: matrix.chip == 'AX650'
         run: |
           sed -i "s/version = \"[0-9.]*\"/version = \"$PKG_VERSION\"/" python/pyproject.toml
 
       - name: Build Python wheel
+        if: matrix.chip == 'AX650'
         run: |
           cd python
           python -m build --wheel
@@ -109,9 +114,10 @@ jobs:
           path: ax_tts_api-${{ matrix.chip }}-v${{ env.PKG_VERSION }}.tar.gz
 
       - name: Upload wheel artifact
+        if: matrix.chip == 'AX650'
         uses: actions/upload-artifact@v4
         with:
-          name: wheel-${{ matrix.chip }}
+          name: wheel
           path: wheels/*.whl
 
   # ============================================================
@@ -136,7 +142,7 @@ jobs:
           merge-multiple: true
 
       - name: List artifacts
-        run: ls -la artifacts/
+        run: find artifacts -type f | sort
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -152,7 +158,7 @@ jobs:
             - AX8850: `ax_tts_api-AX8850-v${{ env.PKG_VERSION }}.tar.gz`
 
             ### Python wheel (aarch64)
-            - AX650, AX630C, AX8850 共用 wheel
+            - AX650 / AX630C / AX8850 共用
 
             ### 安装说明
             ```bash
@@ -162,6 +168,8 @@ jobs:
             # Python wheel
             pip install ax_tts-*.whl
             ```
-          files: artifacts/*
+          files: |
+            artifacts/*.tar.gz
+            artifacts/wheels/*.whl
           draft: false
           prerelease: false
