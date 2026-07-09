@@ -2,8 +2,8 @@
   "goal": "构建 Python wheel 包 + C++ 库/二进制，通过 v* tag 触发 GitHub Actions 发布到 GitHub Releases",
   "stack": "CMake/C++/Python-pybind11",
   "base_branch": "main",
-  "branch": "feat/build-20260709-2254",
-  "iteration": 1,
+  "branch": "feat/build-20260709-2303",
+  "iteration": 2,
   "validation_command": "python3 -c 'import yaml; yaml.safe_load(open(\".github/workflows/release.yml\"))' && python -m pytest python/tests/test_smoke.py -v -k static",
   "requirement_alignment": {
     "goal": "构建 Python wheel 包 + C++ 库/二进制，通过 v* tag 触发 GitHub Actions 发布到 GitHub Releases",
@@ -25,34 +25,16 @@
   },
   "issues": [
     {
-      "number": 10,
-      "title": "feat[1]: 创建 release workflow，v* tag 触发 aarch64 交叉编译 + Python wheel + GitHub Release",
+      "number": 12,
+      "title": "feat[2]: 修复 release.yml — wheel 重复覆盖 + artifacts 递归匹配",
       "acceptance_checks": [
-        "release.yml YAML 语法正确",
-        "覆盖 AX650, AX630C, AX8850 三款芯片",
-        "每款芯片产出 C++ install 目录 + Python wheel",
-        "创建 GitHub Release 并上传 assets"
+        "files glob 能匹配子目录中的 .whl 文件",
+        "只上传一份 Python wheel（三芯片 API 兼容共用）",
+        "YAML 语法正确"
       ]
     }
   ],
-  "rounds": [
-    {
-      "iteration": 1,
-      "issue": 10,
-      "changed_files": [
-        ".github/workflows/release.yml",
-        "python/pyproject.toml",
-        ".build-state.json"
-      ],
-      "validation": {
-        "command": "python3 -c 'import yaml; yaml.safe_load(open(\".github/workflows/release.yml\"))' && python -m pytest python/tests/test_smoke.py -v -k static",
-        "result": "pass",
-        "evidence": "YAML syntax OK, 6/6 static tests passed"
-      },
-      "commit": "55d732a",
-      "status": "complete"
-    }
-  ],
+  "rounds": [],
   "pre_existing_changes": [],
   "assumptions": [
     "aarch64 交叉编译工具链在 CI runner 上可用",
