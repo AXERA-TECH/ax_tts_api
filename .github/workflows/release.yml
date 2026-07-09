@@ -1,0 +1,167 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  # ============================================================
+  # aarch64 交叉编译 (AX650 / AX630C / AX8850)
+  # ============================================================
+  build-aarch64:
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        chip: [AX650, AX630C, AX8850]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache aarch64 toolchain
+        id: cache-toolchain
+        uses: actions/cache@v4
+        with:
+          path: /tmp/aarch64-toolchain
+          key: aarch64-toolchain-9.2-2019.12
+
+      - name: Download aarch64 toolchain
+        if: steps.cache-toolchain.outputs.cache-hit != 'true'
+        run: |
+          curl -L -o /tmp/gcc-arm.tar.xz \
+            "https://developer.arm.com/-/media/Files/downloads/gnu-a/9.2-2019.12/binrel/gcc-arm-9.2-2019.12-x86_64-aarch64-none-linux-gnu.tar.xz"
+          mkdir -p /tmp/aarch64-toolchain
+          tar -xf /tmp/gcc-arm.tar.xz -C /tmp/aarch64-toolchain
+
+      - name: Setup toolchain PATH
+        run: |
+          echo "$(find /tmp/aarch64-toolchain -name 'aarch64-none-linux-gnu-gcc' -exec dirname {} \; | head -1)" >> $GITHUB_PATH
+
+      - name: Setup CMake
+        uses: lukka/get-cmake@latest
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Python build deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install pybind11 numpy build setuptools wheel
+
+      - name: Download BSP SDK
+        run: |
+          if [ "${{ matrix.chip }}" = "AX8850" ]; then
+            git clone https://github.com/Abandon-ht/axcl_bsp_sdk.git --depth=1 axcl_bsp_sdk
+          elif [ "${{ matrix.chip }}" = "AX650" ]; then
+            git clone https://github.com/AXERA-TECH/ax650n_bsp_sdk.git --depth=1 ax650n_bsp_sdk
+          elif [ "${{ matrix.chip }}" = "AX630C" ]; then
+            git clone https://github.com/AXERA-TECH/ax620e_bsp_sdk.git --depth=1 ax620e_bsp_sdk
+          fi
+
+      - name: Extract version from tag
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/}"
+          VERSION="${VERSION#v}"
+          echo "PKG_VERSION=$VERSION" >> $GITHUB_ENV
+          echo "Version: $VERSION"
+
+      - name: CMake configure & build (${{ matrix.chip }})
+        run: |
+          mkdir -p build && cd build
+          cmake ../cpp \
+            -DCHIP_${{ matrix.chip }}=ON \
+            -DCMAKE_TOOLCHAIN_FILE=../toolchains/aarch64-none-linux-gnu.toolchain.cmake \
+            -DCMAKE_INSTALL_PREFIX=../install/${{ matrix.chip }} \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SERVER=ON \
+            -DBUILD_TESTS=OFF \
+            -DBUILD_PYTHON_BINDINGS=ON
+          make -j$(nproc)
+          make install
+
+      - name: Copy _ax_tts_core.so into Python package
+        run: |
+          cp build/python/_ax_tts_core.*.so python/src/ax_tts/ 2>/dev/null || \
+          cp build/python/_ax_tts_core.so python/src/ax_tts/
+
+      - name: Update version in pyproject.toml
+        run: |
+          sed -i "s/version = \"[0-9.]*\"/version = \"$PKG_VERSION\"/" python/pyproject.toml
+
+      - name: Build Python wheel
+        run: |
+          cd python
+          python -m build --wheel
+          mkdir -p ../wheels
+          cp dist/*.whl ../wheels/
+
+      - name: Package C++ install
+        run: |
+          cd install
+          tar -czf ../ax_tts_api-${{ matrix.chip }}-v${{ env.PKG_VERSION }}.tar.gz ${{ matrix.chip }}/
+
+      - name: Upload C++ artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cxx-${{ matrix.chip }}
+          path: ax_tts_api-${{ matrix.chip }}-v${{ env.PKG_VERSION }}.tar.gz
+
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheel-${{ matrix.chip }}
+          path: wheels/*.whl
+
+  # ============================================================
+  # 创建 GitHub Release 并上传所有产物
+  # ============================================================
+  create-release:
+    needs: build-aarch64
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/}"
+          VERSION="${VERSION#v}"
+          echo "PKG_VERSION=$VERSION" >> $GITHUB_ENV
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List artifacts
+        run: ls -la artifacts/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "v${{ env.PKG_VERSION }}"
+          tag_name: "v${{ env.PKG_VERSION }}"
+          body: |
+            ## ax_tts_api v${{ env.PKG_VERSION }}
+
+            ### C++ 安装包 (aarch64)
+            - AX650: `ax_tts_api-AX650-v${{ env.PKG_VERSION }}.tar.gz`
+            - AX630C: `ax_tts_api-AX630C-v${{ env.PKG_VERSION }}.tar.gz`
+            - AX8850: `ax_tts_api-AX8850-v${{ env.PKG_VERSION }}.tar.gz`
+
+            ### Python wheel (aarch64)
+            - AX650, AX630C, AX8850 共用 wheel
+
+            ### 安装说明
+            ```bash
+            # C++ 安装包
+            tar -xzf ax_tts_api-AX650-v${{ env.PKG_VERSION }}.tar.gz
+
+            # Python wheel
+            pip install ax_tts-*.whl
+            ```
+          files: artifacts/*
+          draft: false
+          prerelease: false

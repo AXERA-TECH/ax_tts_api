@@ -1,148 +1,64 @@
 {
-  "goal": "把C++部分搬到cpp文件夹，然后建一个python文件夹，里面做pybind绑定C++部分实现API",
+  "goal": "构建 Python wheel 包 + C++ 库/二进制，通过 v* tag 触发 GitHub Actions 发布到 GitHub Releases",
   "stack": "CMake/C++/Python-pybind11",
   "base_branch": "main",
-  "branch": "feat/build-20260707-01",
-  "iteration": 4,
-  "validation_command": "cd cpp && cmake -S . -B ../build_test -DCHIP_AX8850=ON -DCMAKE_TOOLCHAIN_FILE=../toolchains/aarch64-none-linux-gnu.toolchain.cmake -DBUILD_SERVER=OFF -DBUILD_TESTS=OFF && cmake --build ../build_test -j4",
+  "branch": "feat/build-20260709-2254",
+  "iteration": 1,
+  "validation_command": "python3 -c 'import yaml; yaml.safe_load(open(\".github/workflows/release.yml\"))' && python -m pytest python/tests/test_smoke.py -v -k static",
   "requirement_alignment": {
-    "goal": "把C++部分搬到cpp文件夹，然后建一个python文件夹，里面做pybind绑定C++部分实现API",
+    "goal": "构建 Python wheel 包 + C++ 库/二进制，通过 v* tag 触发 GitHub Actions 发布到 GitHub Releases",
     "non_goals": [],
-    "cpp_move_list": [
-      "src/",
-      "main.cpp",
-      "server/",
-      "tests/",
-      "CMakeLists.txt",
-      "cmake/",
-      "third_party/"
+    "release_target": "GitHub Releases",
+    "chips": [
+      "AX650",
+      "AX630C",
+      "AX8850"
     ],
-    "keep_at_root": [
-      "dict/",
-      "espeak-ng-data/",
-      "models-*",
-      "scripts/",
-      "build_*.sh",
-      "toolchains/",
-      "install/",
-      "download_*.sh",
-      "*.wav",
-      "ax620e_bsp_sdk",
-      "ax650n_bsp_sdk",
-      "axcl_bsp_sdk"
-    ],
-    "python_class": "AX_TTS",
-    "python_return": "numpy array (sample_rate, numpy_array)",
-    "python_build": "pyproject.toml + setuptools + pybind11",
-    "api_scope": "only public C API (AX_TTS_Init, AX_TTS_Run, AX_TTS_Uninit + structs)",
+    "trigger": "v* tag push",
+    "python_wheel": "CI 中 aarch64 交叉编译，两步构建：先 cmake 编译 _ax_tts_core.so，再 python -m build 打 wheel",
+    "cxx_artifacts": "libax_tts_api.a + header + main binary + tts_server binary",
     "iterations": [
-      "迭代1: 创建cpp/，搬移C++文件，修复CMakeLists.txt路径，确保编译通过",
-      "迭代2: 创建python/，写pybind11绑定 + pyproject.toml，确保pip install能构建",
-      "迭代3: Python smoke test，验证AX_TTS类能正常调用"
+      "迭代1: 创建 .github/workflows/release.yml，实现 tag 触发 → aarch64 交叉编译 → C++ install + Python wheel → GitHub Release",
+      "迭代2: 调整 pyproject.toml/setup.py 支持预编译 .so 打包 wheel",
+      "迭代3: 端到端验证：推送测试 tag，确认 CI 生成 Release"
     ]
   },
   "issues": [
     {
-      "number": 5,
-      "title": "feat[1]: 创建cpp/目录，搬移C++源文件、CMake、server、tests",
+      "number": 10,
+      "title": "feat[1]: 创建 release workflow，v* tag 触发 aarch64 交叉编译 + Python wheel + GitHub Release",
       "acceptance_checks": [
-        "CMake 配置成功: cmake -S cpp -B build_test ...",
-        "编译通过: cmake --build build_test",
-        "构建脚本 build_*.sh 中 cmake 路径更新为引用 cpp/"
-      ]
-    },
-    {
-      "number": 6,
-      "title": "feat[2]: 创建python/目录，pybind11绑定C++ API",
-      "acceptance_checks": [
-        "pyproject.toml 可正常构建",
-        "import ax_tts 可导入",
-        "AX_TTS 类可实例化"
-      ]
-    },
-    {
-      "number": 7,
-      "title": "feat[3]: Python smoke test，验证AX_TTS类接口",
-      "acceptance_checks": [
-        "Python 文件语法正确",
-        "包结构可被 Python 发现",
-        "AX_TTS 类接口与 C API 一致"
+        "release.yml YAML 语法正确",
+        "覆盖 AX650, AX630C, AX8850 三款芯片",
+        "每款芯片产出 C++ install 目录 + Python wheel",
+        "创建 GitHub Release 并上传 assets"
       ]
     }
   ],
   "rounds": [
     {
       "iteration": 1,
-      "issue": 5,
+      "issue": 10,
       "changed_files": [
-        "cpp/ (all C++ files moved from root)",
-        "cpp/cmake/msp_dependencies.cmake (BSP paths updated with ../)",
-        "build_620qp.sh, build_ax620q.sh, build_ax630c.sh, build_ax650.sh, build_ax8850_aarch64.sh"
-      ],
-      "validation": {
-        "command": "cmake -S cpp -B build_test -DCHIP_AX8850=ON -DCMAKE_TOOLCHAIN_FILE=../toolchains/aarch64-none-linux-gnu.toolchain.cmake && cmake --build build_test -j4",
-        "result": "pass",
-        "evidence": "CMake configure OK, libax_tts_api.a and main built successfully"
-      },
-      "status": "complete"
-    },
-    {
-      "iteration": 2,
-      "issue": 6,
-      "changed_files": [
-        "python/CMakeLists.txt",
+        ".github/workflows/release.yml",
         "python/pyproject.toml",
-        "python/src/bindings.cpp",
-        "python/src/ax_tts/__init__.py",
-        "cpp/CMakeLists.txt (added BUILD_PYTHON_BINDINGS option)"
+        ".build-state.json"
       ],
       "validation": {
-        "command": "cmake -S cpp -B build_test -DBUILD_PYTHON_BINDINGS=ON ... && cmake --build build_test -j4",
+        "command": "python3 -c 'import yaml; yaml.safe_load(open(\".github/workflows/release.yml\"))' && python -m pytest python/tests/test_smoke.py -v -k static",
         "result": "pass",
-        "evidence": "CMake configure OK, _ax_tts_core.so built for aarch64"
+        "evidence": "YAML syntax OK, 6/6 static tests passed"
       },
-      "status": "complete"
-    },
-    {
-      "iteration": 3,
-      "issue": 7,
-      "changed_files": [
-        "python/tests/test_smoke.py"
-      ],
-      "validation": {
-        "command": "python -m pytest python/tests/test_smoke.py -v -k static",
-        "result": "pass",
-        "evidence": "6/6 static tests passed"
-      },
-      "status": "complete"
-    },
-    {
-      "iteration": "fix",
-      "issue": null,
-      "changed_files": [
-        "build_*.sh",
-        "cpp/cmake/msp_dependencies.cmake"
-      ],
-      "validation": {
-        "result": "pass",
-        "evidence": "committed missing changes from iter-1"
-      },
+      "commit": "55d732a",
       "status": "complete"
     }
   ],
-  "pre_existing_changes": [
-    "?? ax_run_model/",
-    "?? axcl_bsp_sdk/",
-    "?? build_ax8850_aarch64/",
-    "?? en.wav",
-    "?? scripts/output.wav",
-    "?? scripts/test_en.wav",
-    "?? test_en.wav",
-    "?? test_zh.wav"
-  ],
+  "pre_existing_changes": [],
   "assumptions": [
-    "aarch64 cross-compilation toolchain is available for build validation",
-    "pybind11 will be installed via pip in iteration 2"
+    "aarch64 交叉编译工具链在 CI runner 上可用",
+    "pybind11 在 CI 中通过 pip install 可用",
+    "GITHUB_TOKEN 已默认可用，用于创建 Release",
+    "python -m build 需在 CI 中安装"
   ],
-  "pr_url": "https://github.com/AXERA-TECH/ax_tts_api/pull/8"
+  "pr_url": "https://github.com/AXERA-TECH/ax_tts_api/pull/11"
 }
