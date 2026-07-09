@@ -47,7 +47,7 @@ jobs:
         if: matrix.chip == 'AX650'
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.11'
 
       - name: Install Python build deps
         if: matrix.chip == 'AX650'
@@ -108,8 +108,13 @@ jobs:
         run: |
           cd python
           python -m build --wheel
+          # Rename wheel with correct aarch64 platform tag
           mkdir -p ../wheels
-          cp dist/*.whl ../wheels/
+          for whl in dist/*.whl; do
+            new_name=$(echo $whl | sed 's/-py3-none-any/-cp311-cp311-linux_aarch64/')
+            mv "$whl" "$new_name"
+            cp "$new_name" ../wheels/
+          done
 
       - name: Package C++ install
         run: |
