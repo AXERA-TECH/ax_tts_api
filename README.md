@@ -1,6 +1,6 @@
 # ax_tts_api
 
-[![Build](https://github.com/AXERA-TECH/ax_tts_api/actions/workflows/build.yml/badge.svg)](https://github.com/AXERA-TECH/ax_tts_api/actions/workflows/build.yml)
+[![Build](https://github.com/AXERA-TECH/ax_tts_api/actions/workflows/release.yml/badge.svg)](https://github.com/AXERA-TECH/ax_tts_api/actions/workflows/release.yml)
 
 C++ TTS API on Axera platforms with Python bindings.
 
