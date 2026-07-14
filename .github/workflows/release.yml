@@ -17,7 +17,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        chip: [AX650, AX630C, AX8850]
+        include:
+          - chip: AX650
+            python-version: '3.10'
+          - chip: AX650
+            python-version: '3.11'
+          - chip: AX650
+            python-version: '3.12'
+          - chip: AX650
+            python-version: '3.13'
+          - chip: AX630C
+          - chip: AX8850
     steps:
       - uses: actions/checkout@v4
 
@@ -44,13 +54,13 @@ jobs:
         uses: lukka/get-cmake@latest
 
       - name: Setup Python
-        if: matrix.chip == 'AX650'
+        if: matrix.python-version != ''
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '${{ matrix.python-version }}'
 
       - name: Install Python build deps
-        if: matrix.chip == 'AX650'
+        if: matrix.python-version != ''
         run: |
           python -m pip install --upgrade pip
           pip install pybind11 numpy build setuptools wheel
@@ -65,15 +75,20 @@ jobs:
             git clone https://github.com/AXERA-TECH/ax620e_bsp_sdk.git --depth=1 ax620e_bsp_sdk
           fi
 
-      - name: Extract version from tag
+      - name: Extract version and wheel tag
         run: |
           VERSION="${GITHUB_REF#refs/tags/}"
           VERSION="${VERSION#v}"
           echo "PKG_VERSION=$VERSION" >> $GITHUB_ENV
           echo "Version: $VERSION"
+          # Parse cp tag from python version: 3.10 -> cp310
+          if [ -n "${{ matrix.python-version }}" ]; then
+            PY_ABI="cp$(echo ${{ matrix.python-version }} | sed 's/\.//')"
+            echo "WHEEL_TAG=${PY_ABI}-${PY_ABI}-linux_aarch64" >> $GITHUB_ENV
+          fi
 
       - name: Set pybind11_DIR
-        if: matrix.chip == 'AX650'
+        if: matrix.python-version != ''
         run: |
           echo "PYBIND11_DIR=$(python3 -c 'import pybind11; print(pybind11.get_cmake_dir())')" >> $GITHUB_ENV
 
@@ -86,14 +101,14 @@ jobs:
             -DCMAKE_INSTALL_PREFIX=../install/${{ matrix.chip }} \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_SERVER=ON \
-            $([[ "${{ matrix.chip }}" == "AX650" ]] && echo "-Dpybind11_DIR=$PYBIND11_DIR" || true) \
+            $([[ -n "${{ matrix.python-version }}" ]] && echo "-Dpybind11_DIR=$PYBIND11_DIR" || true) \
             -DBUILD_TESTS=OFF \
-            -DBUILD_PYTHON_BINDINGS=${{ matrix.chip == 'AX650' && 'ON' || 'OFF' }}
+            -DBUILD_PYTHON_BINDINGS=${{ matrix.python-version != '' && 'ON' || 'OFF' }}
           make -j$(nproc)
           make install
 
       - name: Copy _ax_tts_core.so into Python package
-        if: matrix.chip == 'AX650'
+        if: matrix.python-version != ''
         run: |
           cp build/python/_ax_tts_core.*.so python/src/ax_tts/ 2>/dev/null || \
           cp build/python/_ax_tts_core.so python/src/ax_tts/
@@ -103,19 +118,18 @@ jobs:
           done
 
       - name: Update version in pyproject.toml
-        if: matrix.chip == 'AX650'
+        if: matrix.python-version != ''
         run: |
           sed -i "s/version = \"[0-9.]*\"/version = \"$PKG_VERSION\"/" python/pyproject.toml
 
       - name: Build Python wheel
-        if: matrix.chip == 'AX650'
+        if: matrix.python-version != ''
         run: |
           cd python
           python -m build --wheel
-          # Rename wheel with correct aarch64 platform tag
           mkdir -p ../wheels
           for whl in dist/*.whl; do
-            new_name=$(echo $whl | sed 's/-py3-none-any/-cp311-cp311-linux_aarch64/')
+            new_name=$(echo $whl | sed "s/-py3-none-any/-${WHEEL_TAG}/")
             mv "$whl" "$new_name"
             cp "$new_name" ../wheels/
           done
@@ -128,14 +142,14 @@ jobs:
       - name: Upload C++ artifact
         uses: actions/upload-artifact@v4
         with:
-          name: cxx-${{ matrix.chip }}
+          name: cxx-${{ matrix.chip }}${{ matrix.python-version && format('-py{0}', matrix.python-version) || '' }}
           path: ax_tts_api-${{ matrix.chip }}-v${{ env.PKG_VERSION }}.tar.gz
 
       - name: Upload wheel artifact
-        if: matrix.chip == 'AX650'
+        if: matrix.python-version != ''
         uses: actions/upload-artifact@v4
         with:
-          name: wheel
+          name: wheel-${{ matrix.python-version }}
           path: wheels/*.whl
 
   # ============================================================
@@ -180,15 +194,18 @@ jobs:
             - AX8850: `ax_tts_api-AX8850-v${{ env.PKG_VERSION }}.tar.gz`
 
             ### Python wheel (aarch64)
-            - AX650 / AX630C / AX8850 共用
+            - Python 3.10: `ax_tts-${{ env.PKG_VERSION }}-cp310-cp310-linux_aarch64.whl`
+            - Python 3.11: `ax_tts-${{ env.PKG_VERSION }}-cp311-cp311-linux_aarch64.whl`
+            - Python 3.12: `ax_tts-${{ env.PKG_VERSION }}-cp312-cp312-linux_aarch64.whl`
+            - Python 3.13: `ax_tts-${{ env.PKG_VERSION }}-cp313-cp313-linux_aarch64.whl`
 
             ### 安装说明
             ```bash
             # C++ 安装包
             tar -xzf ax_tts_api-AX650-v${{ env.PKG_VERSION }}.tar.gz
 
-            # Python wheel
-            pip install ax_tts-*.whl
+            # Python wheel (替换 cp3XX 为对应版本)
+            pip install ax_tts-${{ env.PKG_VERSION }}-cp311-cp311-linux_aarch64.whl
             ```
           files: |
             artifacts/**/*.tar.gz
