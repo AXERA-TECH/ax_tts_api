@@ -1,46 +1,23 @@
 {
-  "goal": "构建 Python wheel 包 + C++ 库/二进制，通过 v* tag 触发 GitHub Actions 发布到 GitHub Releases",
+  "goal": "TTS模型只保留kokoro，kokoro模型采用HuggingFace的inoryQwQ/kokoro.best — 删除MeloTTS全量代码，用kokoro.best的推理pipeline替换旧的Kokoro实现，保持v1.0 API公头不变",
   "stack": "CMake/C++/Python-pybind11",
   "base_branch": "main",
-  "branch": "feat/build-20260709-2312",
-  "iteration": 4,
-  "validation_command": "python3 -c 'import yaml; yaml.safe_load(open(\".github/workflows/release.yml\"))' && python -m pytest python/tests/test_smoke.py -v -k static",
+  "branch": "feat/build-20260724-0345",
+  "iteration": 1,
+  "validation_command": "python3 -m pytest python/tests/test_smoke.py -v -k static",
   "requirement_alignment": {
-    "goal": "构建 Python wheel 包 + C++ 库/二进制，通过 v* tag 触发 GitHub Actions 发布到 GitHub Releases",
-    "non_goals": [],
-    "release_target": "GitHub Releases",
-    "chips": [
-      "AX650",
-      "AX630C",
-      "AX8850"
-    ],
-    "trigger": "v* tag push",
-    "python_wheel": "CI 中 aarch64 交叉编译，两步构建：先 cmake 编译 _ax_tts_core.so，再 python -m build 打 wheel",
-    "cxx_artifacts": "libax_tts_api.a + header + main binary + tts_server binary",
-    "iterations": [
-      "迭代1: 创建 .github/workflows/release.yml，实现 tag 触发 → aarch64 交叉编译 → C++ install + Python wheel → GitHub Release",
-      "迭代2: 调整 pyproject.toml/setup.py 支持预编译 .so 打包 wheel",
-      "迭代3: 端到端验证：推送测试 tag，确认 CI 生成 Release"
-    ]
+    "goal": "删除MeloTTS，kokoro模型切换到inoryQwQ/kokoro.best，用新pipeline(Enc→F0N→Dec→HAR→ISTFT)替换旧pipeline(Part1-3+har_sim)",
+    "non_goals": ["不保留长文本分句/fade_out等旧功能", "不保留MeloTTS任何代码", "不修改第三方库"],
+    "approach": "替换src/源码(除melotts)为kokoro.best版本，保留v1.0 API公头(const char*指针+error code模式)，适配server/bindings/main.cpp",
+    "first_iteration": "删除MeloTTS源码+枚举值，替换kokoro.cpp/hpp/kokoro_frontend.cpp/hpp为新pipeline"
   },
-  "issues": [
-    {
-      "number": 15,
-      "title": "feat[4]: 修复 Release 403 权限 + wheel glob 路径",
-      "acceptance_checks": [
-        "GITHUB_TOKEN 有 contents: write",
-        "wheel 文件能被 glob 匹配",
-        "YAML 语法正确"
-      ]
-    }
-  ],
+  "issues": [],
   "rounds": [],
   "pre_existing_changes": [],
   "assumptions": [
-    "aarch64 交叉编译工具链在 CI runner 上可用",
-    "pybind11 在 CI 中通过 pip install 可用",
-    "GITHUB_TOKEN 已默认可用，用于创建 Release",
-    "python -m build 需在 CI 中安装"
-  ],
-  "pr_url": "https://github.com/AXERA-TECH/ax_tts_api/pull/11"
+    "v1.0 API公头(ax_tts_api.h)保持不变",
+    "server/bindings/main.cpp 适配新的Impl接口签名",
+    "download_models.sh 从 inoryQwQ/kokoro.best 下载新模型文件",
+    "frontend代码用kokoro.best新版本覆盖"
+  ]
 }

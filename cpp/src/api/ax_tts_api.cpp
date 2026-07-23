@@ -8,9 +8,9 @@
  *
  **************************************************************************************************/
 #include "api/ax_tts_api.h"
-#include "tts/tts_factory.hpp"
+#include "tts/kokoro.hpp"
 #include "utils/logger.h"
-#include "utils/AudioFile.h"
+#include <cstring>
 
 #ifdef __cplusplus
 extern "C" {
@@ -46,26 +46,34 @@ AX_TTS_API AX_TTS_ERROR_E AX_TTS_Init(AX_TTS_TYPE_E tts_type,
         return AX_TTS_ERR_NULL_CONFIG;
     }
     
-    if (!init_config->model_path || init_config->model_path[0] == '\0') {
-        ALOGE("model_path is NULL or empty!");
+    if (init_config->model_path[0] == '\0') {
+        ALOGE("model_path is empty!");
         return AX_TTS_ERR_INVALID_MODEL_PATH;
     }
 
-    TTSInterface* iface = TTSFactory::create(tts_type, init_config);
-    if (!iface) {
-        ALOGE("Create tts failed!");
+    if (tts_type != AX_KOKORO) {
+        ALOGE("Unknown tts_type %d", tts_type);
+        return AX_TTS_ERR_UNKNOWN_MODEL;
+    }
+
+    // Make a mutable copy: Kokoro::init may modify model_path internally
+    AX_TTS_INIT_CONFIG mutable_cfg = *init_config;
+
+    Kokoro* kokoro = new Kokoro();
+    if (!kokoro->init(tts_type, &mutable_cfg)) {
+        ALOGE("Kokoro init failed!");
+        delete kokoro;
         return AX_TTS_ERR_MODEL_LOAD_FAILED;
     }
 
-    *handle = static_cast<AX_TTS_HANDLE>(iface);
+    *handle = static_cast<AX_TTS_HANDLE>(kokoro);
     return AX_TTS_OK;
 }
 
 AX_TTS_API void AX_TTS_Uninit(AX_TTS_HANDLE handle) {
     if (handle) {
-        auto interface = static_cast<TTSInterface*>(handle);
-        interface->uninit();
-        delete interface;
+        Kokoro* kokoro = static_cast<Kokoro*>(handle);
+        delete kokoro;
     }
 }
 
@@ -88,9 +96,17 @@ AX_TTS_API AX_TTS_ERROR_E AX_TTS_Run(AX_TTS_HANDLE handle,
         return AX_TTS_ERR_NULL_INPUT;
     }
 
-    auto interface = static_cast<TTSInterface*>(handle);
-    if (!interface->run(std::string(text), run_config, audio)) {
-        ALOGE("Run tts failed!");
+    if (!audio) {
+        ALOGE("audio is NULL!");
+        return AX_TTS_ERR_NULL_CONFIG;
+    }
+
+    // Make a mutable copy for internal use (non-const interface)
+    AX_TTS_RUN_CONFIG mutable_cfg = *run_config;
+
+    Kokoro* kokoro = static_cast<Kokoro*>(handle);
+    if (!kokoro->run(std::string(text), &mutable_cfg, audio)) {
+        ALOGE("Kokoro run failed!");
         return AX_TTS_ERR_INFERENCE_FAILED;
     }
 
@@ -99,4 +115,4 @@ AX_TTS_API AX_TTS_ERROR_E AX_TTS_Run(AX_TTS_HANDLE handle,
 
 #ifdef __cplusplus
 }
-#endif                   
+#endif

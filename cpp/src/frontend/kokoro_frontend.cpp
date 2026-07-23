@@ -28,8 +28,8 @@ public:
     Impl() = default;
     ~Impl() = default;
 
-    bool init(const AX_TTS_INIT_CONFIG* config) {
-        if (!config->espeak_data_path || config->espeak_data_path[0] == '\0') {
+    bool init(AX_TTS_INIT_CONFIG* config) {
+        if (strlen(config->espeak_data_path) == 0) {
             ALOGE("espeak_data_path is not set in config");
             return false;
         }
@@ -150,7 +150,7 @@ KokoroFrontend::~KokoroFrontend() {
     impl_.reset();
 }
 
-bool KokoroFrontend::init(const AX_TTS_INIT_CONFIG* config) {
+bool KokoroFrontend::init(AX_TTS_INIT_CONFIG* config) {
     return impl_->init(config);
 }
 

@@ -1,1090 +1,168 @@
-/**************************************************************************************************
- *
- * Copyright (c) 2019-2026 Axera Semiconductor (Ningbo) Co., Ltd. All Rights Reserved.
- *
- * This source file is the property of Axera Semiconductor (Ningbo) Co., Ltd. and
- * may not be copied or distributed in any isomorphic form without the prior
- * written consent of Axera Semiconductor (Ningbo) Co., Ltd.
- *
- **************************************************************************************************/
 #include <map>
 #include <fstream>
-#include <stdio.h>
-#include <algorithm>
 #include <numeric>
 #include <cmath>
+#include <cstring>
+#include <cstdio>
 
 #include "tts/kokoro.hpp"
+#include "frontend/frontend_interface.hpp"
+#include "frontend/kokoro_frontend.hpp"
 #include "utils/logger.h"
 #include "utils/string_utils.hpp"
-#include "utils/memory_utils.hpp"
 #include "ax_model_runner/ax_model_runner.hpp"
 #include "onnxruntime_cxx_api.h"
-#include "utils/librosa/eigen3/Eigen/Dense"
-#include "utils/librosa/librosa.h"
 
-// Preprocess parameters
-#define MAX_PHONEME_LENGTH   510 // max position embedding - 2
-#define FIXED_SEQ_LEN    96
-#define N_FFT  20
-#define HOP_LENGTH  5
-#define DOUBLE_INPUT_THRESHOLD  32  // 输入长度小于此值时复制一倍,适配短文本
-#define STYLE_DIM   256
+#define MAX_SEQ_LEN     96
+#define STYLE_DIM       256
+#define T_PAD           192
+#define F0_LEN          384
+#define VOICE_HEAD_DIM  128
 
-#define DEFAULT_SPEED   1.0f
-#define DEFAULT_FADE_OUT    0.05f
-#define DEFAULT_PAUSE   0.05f
-
-#ifndef AX_TTS_JA_ENABLE_SHORT_DOUBLE
-#define AX_TTS_JA_ENABLE_SHORT_DOUBLE 0
-#endif
-
-#ifndef AX_TTS_JA_MIN_CHUNK_TOKENS
-#define AX_TTS_JA_MIN_CHUNK_TOKENS 24
-#endif
-
-
-using namespace std;
-
-typedef Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> DynMat;
-
-typedef std::vector<std::vector<std::complex<float>>> FFT_RESULT;
-
-// Helper functions
-static std::vector<float> sigmoid(const std::vector<float>& x) {
-    std::vector<float> result(x.size());
-    for (int i = 0; i < x.size(); i++) {
-        result[i] = 1.0f / (1.0f + expf(-x[i]));
-    }
-    return result;
+static std::vector<float> sigmoid_vec(const std::vector<float>& x) {
+    std::vector<float> r(x.size());
+    for (size_t i = 0; i < x.size(); i++) r[i] = 1.0f / (1.0f + expf(-x[i]));
+    return r;
 }
-
-template <typename T>
-vector<size_t> argsort(const vector<T> &v, int len, bool reverse) {
-    // initialize original index locations
-    vector<size_t> idx(len);
-    iota(idx.begin(), idx.end(), 0);
-
-    // sort indexes based on comparing values in v
-    // using std::stable_sort instead of std::sort
-    // to avoid unnecessary index re-orderings
-    // when v contains elements of equal values 
-    if (!reverse)
-        stable_sort(idx.begin(), idx.end(),
-            [&v](size_t i1, size_t i2) {return v[i1] < v[i2];});
-    else
-        stable_sort(idx.begin(), idx.end(),
-            [&v](size_t i1, size_t i2) {return v[i1] > v[i2];});
-
-    return idx;
+static void transpose(const float* A, float* At, int m, int k) {
+    for (int i = 0; i < m; i++) for (int j = 0; j < k; j++) At[j*m+i] = A[i*k+j];
 }
-
-template <typename T>
-vector<T> np_repeat(const vector<T> &v, const vector<int>& times) {
-    vector<T> result;
-    for (size_t i = 0; i < times.size(); i++) {
-        for (int n = 0; n < times[i]; n++)
-            result.push_back(v[i]);
-    }
-    return result;
+static void matmul(const float* A, const float* B, float* C, int m, int k, int n) {
+    for (int i = 0; i < m; i++) for (int j = 0; j < n; j++) { float s=0; for (int p=0;p<k;p++) s+=A[i*k+p]*B[p*n+j]; C[i*n+j]=s; }
 }
-
-template <typename T>
-std::vector<T> linspace(T a, T b, size_t N) {
-    T h = (b - a) / static_cast<T>(N-1);
-    std::vector<T> xs(N);
-    typename std::vector<T>::iterator x;
-    T val;
-    for (x = xs.begin(), val = a; x != xs.end(); ++x, val += h)
-        *x = val;
-    return xs;
-}
-
-static void append_pause(std::vector<float>& audio, int sample_rate, float pause_sec) {
-    if (pause_sec <= 0.0f) return;
-    int pause_samples = (int)(sample_rate * pause_sec);
-    if (pause_samples > 0) {
-        audio.insert(audio.end(), pause_samples, 0.0f);
-    }
-}
-
-static bool is_ja_language(const std::string& language) {
-    return (language == "ja" || language.rfind("ja-", 0) == 0 || language.rfind("ja_", 0) == 0);
-}
-
-static bool is_split_char(const std::string& c, const std::string& language, bool weak) {
-    const bool is_zh_ja = (language == "zh" || language == "ja");
-    if (c == "\n" || c == "\r") return true;
-
-    if (!weak) {
-        if (is_zh_ja) return c == "。" || c == "！" || c == "？";
-        return c == "." || c == "!" || c == "?";
-    }
-
-    if (is_zh_ja) return c == "，" || c == "、" || c == "；" || c == "：" || c == "…";
-    return c == "," || c == ";" || c == ":" || c == "…";
-}
-
-static std::vector<std::string> split_text_by_punct(const std::string& text,
-                                                    const std::string& language,
-                                                    bool weak) {
-    std::vector<std::string> result;
-    auto chars = utils::split_utf8(text);
-    std::string cur;
-    cur.reserve(text.size());
-
-    for (const auto& c : chars) {
-        cur += c;
-        if (is_split_char(c, language, weak)) {
-            std::string trimmed = utils::strip(cur);
-            if (!trimmed.empty()) result.emplace_back(trimmed);
-            cur.clear();
-        }
-    }
-    std::string trimmed = utils::strip(cur);
-    if (!trimmed.empty()) result.emplace_back(trimmed);
-    return result;
-}
-
-static std::vector<std::string> split_text_by_max_chars(const std::string& text, int max_chars) {
-    std::vector<std::string> result;
-    std::string trimmed = utils::strip(text);
-    if (trimmed.empty()) return result;
-    if (max_chars <= 0) {
-        result.emplace_back(trimmed);
-        return result;
-    }
-
-    auto chars = utils::split_utf8(trimmed);
-    std::string cur;
-    int cnt = 0;
-    for (const auto& c : chars) {
-        cur += c;
-        cnt++;
-        if (cnt >= max_chars) {
-            std::string t = utils::strip(cur);
-            if (!t.empty()) result.emplace_back(t);
-            cur.clear();
-            cnt = 0;
-        }
-    }
-    std::string t = utils::strip(cur);
-    if (!t.empty()) result.emplace_back(t);
-    return result;
-}
-
-static bool fits_max_len(const std::shared_ptr<TTSFrontend>& frontend,
-                         const std::string& text,
-                         const std::string& language,
-                         const std::map<std::string, int>& vocab,
-                         int max_len) {
-    int err = 0;
-    auto ids = frontend->run(text, language, vocab, err);
-    return err == 0 && (int)ids.size() <= max_len;
-}
-
-static std::vector<std::string> split_text_to_fit(const std::shared_ptr<TTSFrontend>& frontend,
-                                                  const std::string& text,
-                                                  const std::string& language,
-                                                  const std::map<std::string, int>& vocab,
-                                                  int max_len,
-                                                  int depth = 0) {
-    std::string trimmed = utils::strip(text);
-    if (trimmed.empty()) return {};
-    if (fits_max_len(frontend, trimmed, language, vocab, max_len)) return {trimmed};
-
-    if (depth == 0) {
-        auto strong = split_text_by_punct(trimmed, language, false);
-        if (strong.size() > 1) {
-            std::vector<std::string> out;
-            for (const auto& s : strong) {
-                auto subs = split_text_to_fit(frontend, s, language, vocab, max_len, depth + 1);
-                out.insert(out.end(), subs.begin(), subs.end());
-            }
-            return out;
-        }
-    }
-
-    auto weak = split_text_by_punct(trimmed, language, true);
-    if (weak.size() > 1) {
-        std::vector<std::string> out;
-        for (const auto& s : weak) {
-            auto subs = split_text_to_fit(frontend, s, language, vocab, max_len, depth + 1);
-            out.insert(out.end(), subs.begin(), subs.end());
-        }
-        return out;
-    }
-
-    int max_chars = std::max(8, 40 - depth * 8);
-    auto parts = split_text_by_max_chars(trimmed, max_chars);
-    if (parts.size() > 1) {
-        std::vector<std::string> out;
-        for (const auto& p : parts) {
-            auto subs = split_text_to_fit(frontend, p, language, vocab, max_len, depth + 1);
-            out.insert(out.end(), subs.begin(), subs.end());
-        }
-        return out;
-    }
-
-    // Give up: return single piece, impl will truncate.
-    return {trimmed};
-}
-
-static int token_size_for_text(const std::shared_ptr<TTSFrontend>& frontend,
-                               const std::string& text,
-                               const std::string& language,
-                               const std::map<std::string, int>& vocab) {
-    int err = 0;
-    auto ids = frontend->run(text, language, vocab, err);
-    if (err != 0) return -1;
-    return static_cast<int>(ids.size());
-}
-
-static std::vector<std::string> merge_short_chunks_for_ja(const std::shared_ptr<TTSFrontend>& frontend,
-                                                          const std::vector<std::string>& chunks,
-                                                          const std::string& language,
-                                                          const std::map<std::string, int>& vocab,
-                                                          int max_len) {
-    if (!is_ja_language(language) || chunks.size() <= 1) {
-        return chunks;
-    }
-
-    const int min_tokens = std::max(8, AX_TTS_JA_MIN_CHUNK_TOKENS);
-    std::vector<std::string> merged;
-    std::string cur = chunks[0];
-    int cur_len = token_size_for_text(frontend, cur, language, vocab);
-    if (cur_len <= 0) cur_len = max_len;
-
-    for (size_t i = 1; i < chunks.size(); ++i) {
-        const std::string& nxt = chunks[i];
-        int nxt_len = token_size_for_text(frontend, nxt, language, vocab);
-        if (nxt_len <= 0) nxt_len = max_len;
-
-        bool merged_ok = false;
-        if (cur_len < min_tokens) {
-            std::string joined = cur + nxt;
-            int joined_len = token_size_for_text(frontend, joined, language, vocab);
-            if (joined_len > 0 && joined_len <= max_len) {
-                cur = std::move(joined);
-                cur_len = joined_len;
-                merged_ok = true;
-            }
-        }
-
-        if (!merged_ok) {
-            merged.emplace_back(std::move(cur));
-            cur = nxt;
-            cur_len = nxt_len;
-        }
-    }
-    merged.emplace_back(std::move(cur));
-
-    if (merged.size() >= 2) {
-        const size_t tail_idx = merged.size() - 1;
-        int tail_len = token_size_for_text(frontend, merged[tail_idx], language, vocab);
-        if (tail_len > 0 && tail_len < min_tokens) {
-            std::string joined = merged[tail_idx - 1] + merged[tail_idx];
-            int joined_len = token_size_for_text(frontend, joined, language, vocab);
-            if (joined_len > 0 && joined_len <= max_len) {
-                merged[tail_idx - 1] = std::move(joined);
-                merged.pop_back();
-            }
-        }
-    }
-
-    return merged;
-}
-
 
 class Kokoro::Impl {
 public:
-    Impl() = default;
-    ~Impl() {
-        uninit();
+    ~Impl() { uninit(); }
+    bool init(AX_TTS_TYPE_E, AX_TTS_INIT_CONFIG* cfg) {
+        std::string mp(cfg->model_path); model_path_ = mp;
+        return load_models_(mp);
     }
-
-    bool init(AX_TTS_TYPE_E tts_type, const std::string& model_path, const AX_TTS_INIT_CONFIG* init_config) {
-        max_seq_len_ = init_config->max_seq_len;
-
-        voice_path_ = model_path + "/voices/";
-
-        if (!init_config->espeak_data_path || init_config->espeak_data_path[0] == '\0') {
-            ALOGE("espeak_data_path is NULL!");
-            return false;
-        }
-
-        if (!load_models_(model_path)) {
-            ALOGE("Load models failed!");
-            return false;
-        }
-
-        // Prepare model outputs
-        duration_.resize(model1_.get_output_size(0) / sizeof(float));
-        d_.resize(model1_.get_output_size(1) / sizeof(float));
-
-        // F0_pred, N_pred, asr = outputs2
-        F0_pred_.resize(model2_.get_output_size(0) / sizeof(float));
-        N_pred_.resize(model2_.get_output_size(1) / sizeof(float));
-        asr_.resize(model2_.get_output_size(2) / sizeof(float));
-
-        x_.resize(model3_.get_output_size(0) / sizeof(float));
-
-        duration_shape_ = model1_.get_output_shape(0);
-        d_shape_ = model1_.get_output_shape(1);
-
-        F0_pred_shape_ = model2_.get_output_shape(0);
-
-        x_shape_ = model3_.get_output_shape(0);
-
+    void uninit() { enc_.unload_model(); f0n_.unload_model(); dec_.unload_model(); har_sess_.release(); istft_sess_.release(); }
+    bool run(const std::vector<int>& input_ids, AX_TTS_RUN_CONFIG* cfg, AX_TTS_AUDIO** audio) {
+        if (!cfg->voice) return false;
+        std::string vn(cfg->voice);
+        if (vn != voice_name_) { if (!load_voice_(model_path_, vn)) return false; voice_name_ = vn; }
+        std::vector<float> ad;
+        if (!run_models_(input_ids, cfg->speed, ad)) return false;
+        *audio = (AX_TTS_AUDIO*)malloc(sizeof(AX_TTS_AUDIO)+sizeof(float)*ad.size());
+        auto* a=*audio; a->channels=1; a->num_samples=(int)ad.size(); a->sample_rate=cfg->sample_rate;
+        std::memcpy(a->data, ad.data(), sizeof(float)*ad.size());
         return true;
     }
-
-    int get_max_seq_len() const { return max_seq_len_; }
-
-    void uninit(void) {
-        model1_.unload_model();
-        model2_.unload_model();
-        model3_.unload_model();
-        model4_.release();
-    }
-
-    bool run(std::vector<int>& input_ids, const AX_TTS_RUN_CONFIG* run_config, AX_TTS_AUDIO** audio) {
-        if (!run_config->voice || run_config->voice[0] == '\0') {
-            ALOGE("voice is not set");
-            return false;
-        }
-
-        std::string voice_name(run_config->voice);
-        if (voice_name != voice_name_) {
-            // Reload voice tensor if voice name is changed
-            if (!get_voice_style_(voice_path_, voice_name)) {
-                ALOGE("Load voice failed!");
-                return false;
-            }
-            voice_name_ = voice_name;
-        }
-
-        // printf("[");
-        // for (auto i : input_ids) {
-        //     printf("%d ", i);
-        // }
-        // printf("]\n");
-
-        // get voice
-        int phoneme_len = (int)input_ids.size() - 2;
-        if (phoneme_len < 0) phoneme_len = 0;
-
-        auto ref_s = load_voice_embedding_(phoneme_len);
-
-        std::vector<float> audio_data;
-        const bool is_ja = is_ja_language(run_config->language);
-        const bool enable_short_double = (!is_ja) || (AX_TTS_JA_ENABLE_SHORT_DOUBLE != 0);
-
-        if (!run_models_(input_ids,
-                         ref_s,
-                         run_config->speed,
-                         run_config->fade_out,
-                         run_config->sample_rate,
-                         enable_short_double,
-                         audio_data)) {
-            ALOGE("Run models failed!");
-            return false;
-        }
-
-        *audio = (AX_TTS_AUDIO*)malloc(sizeof(AX_TTS_AUDIO) + sizeof(float) * audio_data.size());
-        AX_TTS_AUDIO* audio_ptr = *audio;
-        audio_ptr->channels = 1;
-        audio_ptr->num_samples = audio_data.size();
-        audio_ptr->sample_rate = run_config->sample_rate;
-        std::memcpy(audio_ptr->data, audio_data.data(), sizeof(float) * audio_data.size());
-
-        return true;
-    }
-
 private:
-    bool load_models_(const std::string& model_path) {
-        std::string model1_path = model_path + "/kokoro_part1_96.axmodel";
-        std::string model2_path = model_path + "/kokoro_part2_96.axmodel";
-        std::string model3_path = model_path + "/kokoro_part3_96.axmodel";
-        std::string model4_path = model_path + "/model4_har_sim.onnx";
+    AxModelRunner enc_,f0n_,dec_;
+    Ort::Env ort_env_{ORT_LOGGING_LEVEL_WARNING,"Kokoro"};
+    Ort::Session har_sess_{nullptr},istft_sess_{nullptr};
+    std::string voice_name_,model_path_;
+    std::vector<float> voice_tensor_,d_buf_,t_en_buf_,dur_buf_,f0_buf_,n_buf_,dec_buf_;
+    std::vector<int> d_shape_,f0_shape_,dec_shape_;
 
-        int ret = 0;
-        ret = model1_.load_model(model1_path.c_str());
-        if (ret != 0) {
-            ALOGE("Load model1 from %s failed! ret=0x%x", model1_path.c_str(), ret);
-            return false;
-        }
-
-        ret = model2_.load_model(model2_path.c_str());
-        if (ret != 0) {
-            ALOGE("Load model2 from %s failed! ret=0x%x", model2_path.c_str(), ret);
-            return false;
-        }
-
-        ret = model3_.load_model(model3_path.c_str());
-        if (ret != 0) {
-            ALOGE("Load model3 from %s failed! ret=0x%x", model3_path.c_str(), ret);
-            return false;
-        }
-
-        if (!utils::file_exist(model4_path)) {
-            ALOGE("model4 %s not exist", model4_path.c_str());
-            return false;
-        }
-
-        env_ = Ort::Env(ORT_LOGGING_LEVEL_WARNING, "Kokoro");
-        // Initialize session options
-        Ort::SessionOptions session_options;
-        session_options.SetIntraOpNumThreads(1);
-        session_options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
-
-        model4_ = Ort::Session(env_, model4_path.c_str(), session_options);
-
-        // Prepare model outputs
-        duration_.resize(model1_.get_output_size(0) / sizeof(float));
-        d_.resize(model1_.get_output_size(1) / sizeof(float));
-
-        // F0_pred, N_pred, asr = outputs2
-        F0_pred_.resize(model2_.get_output_size(0) / sizeof(float));
-        N_pred_.resize(model2_.get_output_size(1) / sizeof(float));
-        asr_.resize(model2_.get_output_size(2) / sizeof(float));
-
-        x_.resize(model3_.get_output_size(0) / sizeof(float));
-
-        duration_shape_ = model1_.get_output_shape(0);
-        d_shape_ = model1_.get_output_shape(1);
-
-        F0_pred_shape_ = model2_.get_output_shape(0);
-
-        x_shape_ = model3_.get_output_shape(0);
+    bool load_models_(const std::string& mp) {
+        std::string ep=mp+"/kokoro_enc_axera.axmodel"; if(enc_.load_model(ep.c_str())!=0){ALOGE("enc:%s",ep.c_str());return false;}
+        std::string fp=mp+"/kokoro_f0n.axmodel"; if(f0n_.load_model(fp.c_str())!=0){ALOGE("f0n:%s",fp.c_str());return false;}
+        std::string dp=mp+"/kokoro_dec.axmodel"; if(dec_.load_model(dp.c_str())!=0){ALOGE("dec:%s",dp.c_str());return false;}
+        Ort::SessionOptions so; so.SetIntraOpNumThreads(1);
+        har_sess_=Ort::Session(ort_env_,(mp+"/kokoro_har_noup.onnx").c_str(),so);
+        istft_sess_=Ort::Session(ort_env_,(mp+"/kokoro_istft.onnx").c_str(),so);
+        d_buf_.resize(enc_.get_output_size(0)/sizeof(float)); t_en_buf_.resize(enc_.get_output_size(1)/sizeof(float));
+        dur_buf_.resize(enc_.get_output_size(2)/sizeof(float)); f0_buf_.resize(f0n_.get_output_size(0)/sizeof(float));
+        n_buf_.resize(f0n_.get_output_size(1)/sizeof(float)); dec_buf_.resize(dec_.get_output_size(0)/sizeof(float));
+        d_shape_=enc_.get_output_shape(0); f0_shape_=f0n_.get_output_shape(0); dec_shape_=dec_.get_output_shape(0);
         return true;
     }
-
-    bool get_voice_style_(const std::string& voices_path, const std::string& voice_name) {
-        // 打开文件（二进制模式）
-        std::string voice_bin_path = voices_path + "/" + voice_name + ".bin";
-        if (!utils::file_exist(voice_bin_path)) {
-            ALOGE("voice path %s not exist", voice_bin_path.c_str());
-            return false;
-        }
-
-        voice_tensor_.resize(MAX_PHONEME_LENGTH * STYLE_DIM);
-        std::vector<char> raw_data;
-        if (!utils::read_file(voice_bin_path, raw_data)) {
-            ALOGE("Read file %s failed!", voice_bin_path.c_str());
-            return false;
-        }
-
-        if (raw_data.size() / 4 != voice_tensor_.size()) {
-            ALOGE("File size not equal to %d*%d", MAX_PHONEME_LENGTH, STYLE_DIM);
-            return false;
-        }
-        
-        std::memcpy(voice_tensor_.data(), raw_data.data(), raw_data.size());
+    bool load_voice_(const std::string& mp,const std::string& vn){
+        std::string p=mp+"/voices/"+vn+".bin"; FILE* f=fopen(p.c_str(),"rb");
+        if(!f){ALOGE("voice %s",p.c_str());return false;}
+        voice_tensor_.resize(STYLE_DIM);
+        if(fread(voice_tensor_.data(),sizeof(float),STYLE_DIM,f)!=STYLE_DIM){fclose(f);return false;}
+        fclose(f); return true;
+    }
+    bool run_models_(std::vector<int> input_ids,float speed,std::vector<float>& audio){
+        int al=(int)input_ids.size(); if(al>MAX_SEQ_LEN){input_ids.resize(MAX_SEQ_LEN);al=MAX_SEQ_LEN;}
+        input_ids.resize(MAX_SEQ_LEN,0);
+        std::vector<float> sh(voice_tensor_.begin(),voice_tensor_.begin()+VOICE_HEAD_DIM);
+        std::vector<float> st(voice_tensor_.begin()+VOICE_HEAD_DIM,voice_tensor_.end());
+        // 1. Encoder
+        std::vector<void*> ei{(void*)input_ids.data(),(void*)st.data()};
+        std::vector<void*> eo{(void*)d_buf_.data(),(void*)t_en_buf_.data(),(void*)dur_buf_.data()};
+        enc_.set_inputs(ei); if(enc_.run()!=0)return false; enc_.get_outputs(eo);
+        // 2. Duration+Align
+        int tf; std::vector<int> pd; process_duration_(dur_buf_,al,speed,pd,tf);
+        std::vector<float> dT(640*96); transpose(d_buf_.data(),dT.data(),96,640);
+        std::vector<float> aln(MAX_SEQ_LEN*tf,0);
+        for(int i=0,c=0;i<MAX_SEQ_LEN;i++)for(int r=0;r<pd[i];r++)if(c<tf)aln[i*tf+c++]=1;
+        std::vector<float> en_raw(640*tf),en_buf(640*T_PAD,0);
+        matmul(dT.data(),aln.data(),en_raw.data(),640,96,tf);
+        for(int i=0;i<640;i++)std::memcpy(&en_buf[i*T_PAD],&en_raw[i*tf],tf*4);
+        std::vector<float> asr_raw(512*tf),asr_buf(512*T_PAD,0);
+        matmul(t_en_buf_.data(),aln.data(),asr_raw.data(),512,96,tf);
+        for(int i=0;i<512;i++)std::memcpy(&asr_buf[i*T_PAD],&asr_raw[i*tf],tf*4);
+        // 3. F0N
+        std::vector<void*> fi{(void*)en_buf.data(),(void*)st.data()};
+        std::vector<void*> fo{(void*)f0_buf_.data(),(void*)n_buf_.data()};
+        f0n_.set_inputs(fi); if(f0n_.run()!=0)return false; f0n_.get_outputs(fo);
+        // 4. HAR
+        std::vector<float> f0_up(115200);
+        for(int i=0;i<F0_LEN;i++)for(int j=0;j<300;j++)f0_up[i*300+j]=f0_buf_[i];
+        int64_t fs[]={1,115200};
+        auto mem=Ort::MemoryInfo::CreateCpu(OrtDeviceAllocator,OrtMemTypeCPU);
+        std::vector<Ort::Value> hi;
+        hi.push_back(Ort::Value::CreateTensor<float>(mem,f0_up.data(),115200,fs,2));
+        const char* hin[]={"f0_up"},*hout[]={"har"};
+        auto ho=har_sess_.Run(Ort::RunOptions{nullptr},hin,hi.data(),1,hout,1);
+        std::vector<float> har(ho.front().GetTensorTypeAndShapeInfo().GetElementCount());
+        std::memcpy(har.data(),ho.front().GetTensorMutableData<float>(),har.size()*4);
+        // 5. Decoder
+        std::vector<void*> di{(void*)asr_buf.data(),(void*)f0_buf_.data(),(void*)n_buf_.data(),(void*)sh.data(),(void*)har.data()};
+        dec_.set_inputs(di); if(dec_.run()!=0)return false; dec_.get_output(0,dec_buf_.data());
+        // 6. ISTFT
+        int64_t rs[]={1,(int64_t)dec_shape_[1],(int64_t)dec_shape_[2]};
+        std::vector<Ort::Value> ii;
+        ii.push_back(Ort::Value::CreateTensor<float>(mem,dec_buf_.data(),dec_buf_.size(),rs,3));
+        const char* iin[]={"raw_x"},*iout[]={"waveform"};
+        auto io=istft_sess_.Run(Ort::RunOptions{nullptr},iin,ii.data(),1,iout,1);
+        audio.resize(io.front().GetTensorTypeAndShapeInfo().GetElementCount());
+        std::memcpy(audio.data(),io.front().GetTensorMutableData<float>(),audio.size()*4);
+        int ts=(int)(tf*300.0f*224.0f/151.0f);
+        if(ts<(int)audio.size())audio.resize(ts);
         return true;
     }
-
-    std::vector<float> load_voice_embedding_(int phoneme_len) {
-        phoneme_len = std::max(phoneme_len, 0);
-        std::vector<float> ref_s(STYLE_DIM);
-        if (phoneme_len < MAX_PHONEME_LENGTH) {
-            ref_s.assign(voice_tensor_.begin() + phoneme_len * STYLE_DIM, voice_tensor_.begin() + (phoneme_len + 1) * STYLE_DIM);
-        } else {
-            int idx = MAX_PHONEME_LENGTH / 2;
-            ref_s.assign(voice_tensor_.begin() + idx * STYLE_DIM, voice_tensor_.begin() + (idx + 1) * STYLE_DIM);
-        }
-        return ref_s;
+    void process_duration_(const std::vector<float>& dur,int al,float speed,std::vector<int>& pd,int& tf){
+        auto ds=sigmoid_vec(dur); int D50=50;
+        pd.resize(MAX_SEQ_LEN,0); int total=0,fixed=MAX_SEQ_LEN*2;
+        for(int i=0;i<al;i++){float s=0;for(int j=0;j<D50;j++)s+=ds[i*D50+j];pd[i]=std::max(1,(int)roundf(s/speed));total+=pd[i];}
+        int diff=fixed-total,pl=MAX_SEQ_LEN-al;
+        if(diff>0&&pl>0){int e=diff/pl,r=diff%pl;
+            for(int i=al;i<MAX_SEQ_LEN;i++)pd[i]=e;
+            for(int i=al;i<al+r;i++)pd[i]++;}
+        else if(diff<0){for(int d=abs(diff);d>0;){int mi=0;float mv=-1;
+            for(int i=0;i<al;i++)if(pd[i]>1&&(float)pd[i]>mv){mv=(float)pd[i];mi=i;}
+            if(mv<=1||mi>=al)break;pd[mi]--;d--;}}
+        tf=std::accumulate(pd.begin(),pd.end(),0);
     }
-
-    bool run_models_(
-        std::vector<int>& input_ids,
-        const std::vector<float>& ref_s,
-        float speed,
-        float fade_out,
-        int sample_rate,
-        bool enable_short_double,
-        std::vector<float>& audio
-    ) {
-        int actual_len = input_ids.size();
-        if (actual_len > max_seq_len_) {
-            ALOGW("Input ids length %d exceeds max_seq_len %d, truncating.", actual_len, max_seq_len_);
-            input_ids.resize(max_seq_len_);
-            actual_len = max_seq_len_;
-        }
-        // 填充到固定长度
-        int padding_len = max_seq_len_ - actual_len;
-        if (padding_len > 0) {
-            std::vector<int> padding(padding_len, 0);
-            input_ids.insert(input_ids.end(), padding.begin(), padding.end());
-        }
-
-        int fade_samples = 0;
-        if (fade_out > 0) {
-            fade_samples = int(sample_rate * fade_out);
-        }
-
-        int actual_content_frames;
-        int total_frames;
-        if (!inference_single_chunk_(input_ids, 
-            ref_s, actual_len, speed, enable_short_double, audio, actual_content_frames, total_frames)) {
-            return false;
-        }
-
-        trim_audio_by_content_(
-            audio, actual_content_frames, total_frames, actual_len
-        );
-
-        if (fade_samples > 0)
-            apply_fade_out_(audio, fade_samples);
-
-        return true;
-    }
-
-    bool inference_single_chunk_(
-        std::vector<int>& input_ids,
-        const std::vector<float>& ref_s,
-        int actual_len,
-        float speed,
-        bool enable_short_double,
-        std::vector<float>& audio,
-        int& actual_content_frames,
-        int& total_frames
-    ) {
-        int ret = 0;
-        // Prepare inputs
-        bool is_doubled = false;
-        int original_actual_len = actual_len;
-
-        prepare_input_ids_(input_ids, actual_len, is_doubled, enable_short_double);
-
-        std::vector<int> input_lengths;
-        std::vector<uint8_t> text_mask;
-        compute_external_preprocessing_(input_ids, actual_len, input_lengths, text_mask);
-
-        // outputs1 = self.session1.run(None, {'input_ids': input_ids.astype(np.int32), 'ref_s': ref_s, 'text_mask': text_mask.astype(np.uint8)})
-        std::vector<void*> model1_inputs{(void*)input_ids.data(), (void*)ref_s.data(), (void*)text_mask.data()};
-        std::vector<void*> model1_outputs{(void*)duration_.data(), (void*)d_.data()};
-
-        // printf("run model 1\n");
-        model1_.set_inputs(model1_inputs);
-        ALOGD("Run model1");
-        ret = model1_.run();
-        if (0 != ret) {
-            ALOGE("Run model1 failed! ret=0x%x", ret);
-            return false;
-        }
-        model1_.get_outputs(model1_outputs);
-
-        // 处理duration并对齐
-        std::vector<int> pred_dur;
-        process_duration_(duration_, actual_len, speed, pred_dur, total_frames);
-        auto pred_aln_trg = create_alignment_matrix_(pred_dur, total_frames);
-
-        // Model2: 预测F0和ASR特征
-        // d_transposed = np.transpose(d, (0, 2, 1))
-        // en = d_transposed @ pred_aln_trg
-        DynMat M_d = Eigen::Map<DynMat>(
-            d_.data(), 
-            d_shape_[1],  // 96
-            d_shape_[2]   // 640
-        );
-        
-        DynMat M_pred_aln_trg = Eigen::Map<DynMat>(
-            pred_aln_trg.data(), 
-            max_seq_len_,  // 96
-            total_frames   // 192
-        );
-
-        DynMat M_en = M_d.transpose() * M_pred_aln_trg;
-        std::vector<float> en(M_en.size());
-        std::memcpy(en.data(), M_en.data(), M_en.size() * sizeof(float));
-
-        std::vector<float> text_mask_float;
-        std::transform(text_mask.begin(), text_mask.end(),
-                    std::back_inserter(text_mask_float),
-                    [](uint8_t i) { return static_cast<float>(i); });
-
-        // F0_pred, N_pred, asr = outputs2
-        std::vector<void*> model2_inputs{
-            (void*)en.data(), 
-            (void*)ref_s.data(), 
-            (void*)input_ids.data(),
-            (void*)text_mask_float.data(), 
-            (void*)pred_aln_trg.data()
-        };
-        std::vector<void*> model2_outputs{
-            (void*)F0_pred_.data(),
-            (void*)N_pred_.data(), 
-            (void*)asr_.data()
-        };
-
-        model2_.set_inputs(model2_inputs);
-        ALOGD("Run model2");
-        ret = model2_.run();
-        if (0 != ret) {
-            ALOGE("Run model2 failed! ret=0x%x", ret);
-            return false;
-        }
-        model2_.get_outputs(model2_outputs);
-
-        std::vector<float> har;
-        ALOGD("Run onnx model");
-        compute_har_onnx_(F0_pred_, har);
-
-        std::vector<void*> model3_inputs{
-            (void*)asr_.data(), 
-            (void*)F0_pred_.data(), 
-            (void*)N_pred_.data(),
-            (void*)ref_s.data(), 
-            (void*)har.data()
-        };
-
-        ALOGD("Run model3");
-        model3_.set_inputs(model3_inputs);
-        ret = model3_.run();
-        if (0 != ret) {
-            ALOGE("Run model3 failed! ret=0x%x", ret);
-            return false;
-        }
-        model3_.get_output(0, x_.data());
-
-        // 转换为音频
-        postprocess_x_to_audio_(x_, audio);
-        
-        if (is_doubled) {
-            actual_content_frames = std::accumulate(pred_dur.begin(), pred_dur.begin() + original_actual_len, 0);
-            if (actual_content_frames > 0 && total_frames > 0 && !audio.empty()) {
-                size_t keep_samples = static_cast<size_t>(
-                    llround(static_cast<double>(audio.size()) *
-                            static_cast<double>(actual_content_frames) /
-                            static_cast<double>(total_frames)));
-                keep_samples = std::max<size_t>(1, std::min(keep_samples, audio.size()));
-                audio.resize(keep_samples);
-            } else if (!audio.empty()) {
-                audio.resize(audio.size() / 2);
-            }
-            // We already clipped to the first utterance content area.
-            total_frames = actual_content_frames;
-        } else {
-            actual_content_frames = std::accumulate(pred_dur.begin(), pred_dur.begin() + actual_len, 0);
-        }
-
-        return true;
-    }
-
-    void trim_audio_by_content_(std::vector<float>& audio, int actual_content_frames, int total_frames, int actual_len) {
-        // 根据实际内容比例裁剪音频
-        int padding_len = max_seq_len_ - actual_len;
-        if (padding_len > 0) {
-            float content_ratio = actual_content_frames * 1.0f / total_frames;
-            int audio_len_to_keep = int(audio.size() * content_ratio);
-            audio.resize(audio_len_to_keep);
-        }
-    }
-
-    void apply_fade_out_(std::vector<float>& audio, int fade_samples) {
-        // 末尾淡出音频
-        if (audio.size() <= fade_samples || fade_samples <= 0)
-            return;
-
-        std::vector<float> fade_out = linspace(1.0f, 0.0f, fade_samples);
-        // audio_faded = audio.copy()
-        // audio_faded[-fade_samples:] *= fade_out
-        // return audio_faded
-        for (int i = 0; i < fade_samples; i++) {
-            audio[i - fade_samples + audio.size()] *= fade_out[i];
-        }
-    }
-
-    void prepare_input_ids_(std::vector<int>& input_ids, int& actual_len, bool& is_doubled, bool enable_short_double) {
-        // 准备输入ID，对短输入进行复制处理
-        is_doubled = false;
-        int original_actual_len = actual_len;
-
-        // printf("actual_len 3: %d\n", actual_len);
-        if (enable_short_double && actual_len <= DOUBLE_INPUT_THRESHOLD) {
-            // printf("doubled!\n");
-            is_doubled = true;
-            // valid_content = input_ids[:, :actual_len]
-            std::vector<int> valid_content(input_ids.begin(), input_ids.begin() + actual_len);
-            // input_ids_doubled = np.concatenate([valid_content, valid_content], axis=1)
-            std::vector<int> input_ids_doubled;
-            // input_ids_doubled.reserve(2 * actual_len);
-            input_ids_doubled.insert(input_ids_doubled.end(), valid_content.begin(), valid_content.end());
-            input_ids_doubled.insert(input_ids_doubled.end(), valid_content.begin(), valid_content.end());
-            
-            // padding_len = self.max_seq_len_ - input_ids_doubled.shape[1]
-            int padding_len = max_seq_len_ - 2 * actual_len;
-            // printf("padding_len: %d\n", padding_len);
-            if (padding_len > 0) {
-                // input_ids = np.concatenate([input_ids_doubled, np.zeros((1, padding_len), dtype=input_ids.dtype)], axis=1)
-                std::vector<int> padding(padding_len, 0);
-                input_ids_doubled.insert(input_ids_doubled.end(), padding.begin(), padding.end());
-            }
-            else {
-                // input_ids = input_ids_doubled[:, :self.max_seq_len_]
-                input_ids_doubled.resize(max_seq_len_);
-            }
-
-            // save_file(input_ids_doubled, "input_ids2_1.bin");
-                
-            input_ids = input_ids_doubled;
-            actual_len = std::min(original_actual_len * 2, max_seq_len_);
-        }
-    }
-
-    void compute_external_preprocessing_(const std::vector<int>& input_ids, int actual_len, std::vector<int>& input_lengths, std::vector<uint8_t>& text_mask) {
-        // 计算输入预处理：长度和mask
-        // input_lengths = np.full((input_ids.shape[0],), actual_len, dtype=np.int64)
-        input_lengths = std::vector<int>{actual_len};
-        // text_mask = np.arange(self.max_seq_len_)[np.newaxis, :] >= input_lengths[:, np.newaxis]
-        text_mask.resize(max_seq_len_);
-        for (int i = 0; i < max_seq_len_; i++) {
-            text_mask[i] = (i >= actual_len) ? 1 : 0;
-        }
-    }
-
-    void process_duration_(const std::vector<float>& duration, int actual_len, float speed, std::vector<int>& pred_dur, int& total_frames) {
-        // """处理duration预测，调整到固定帧数"""
-        // duration_processed = 1.0 / (1.0 + np.exp(-duration))
-        // duration_processed = duration_processed.sum(axis=-1) / speed
-        // pred_dur_original = np.round(duration_processed).clip(min=1).astype(np.int64).squeeze()
-        std::vector<int> pred_dur_original(actual_len, 0);
-        std::vector<float> duration_processed = sigmoid(duration);
-        for (int i = 0; i < actual_len; i++) {
-            float sum = 0;
-
-            // duration shape: [1, 96, 50]
-            for (int n = 0; n < duration_shape_[2]; n++) {
-                sum += duration_processed[i * duration_shape_[2] + n];
-            }
-            sum /= speed;
-
-            pred_dur_original[i] = int(std::max(1.f, roundf(sum)));
-        }
-
-        // # 分离实际内容和padding
-        // pred_dur_actual = pred_dur_original[:actual_len]
-        // pred_dur_padding = np.zeros(self.max_seq_len_ - actual_len, dtype=np.int64)
-        // pred_dur = np.concatenate([pred_dur_actual, pred_dur_padding])
-        std::vector<int> pred_dur_padding(max_seq_len_ - actual_len, 0);
-        pred_dur = pred_dur_original;
-        pred_dur.insert(pred_dur.end(), pred_dur_padding.begin(), pred_dur_padding.end());
-
-        
-        // # 调整实际内容部分，只处理长度超出情况
-        // fixed_total_frames = self.max_seq_len_ * 2
-        // diff = fixed_total_frames - pred_dur[:actual_len].sum()
-        
-        // if diff < 0:
-        //     # 减少帧数
-        //     indices = np.argsort(pred_dur[:actual_len])[::-1]
-        //     decreased = 0
-        //     for idx in indices:
-        //         if pred_dur[idx] > 1 and decreased < abs(diff):
-        //             pred_dur[idx] -= 1
-        //             decreased += 1
-        //         if decreased >= abs(diff):
-        //             break
-
-        // 调整实际内容部分，只处理长度超出情况
-        int fixed_total_frames = max_seq_len_ * 2;
-        int actual_frames = std::accumulate(pred_dur.begin(), pred_dur.begin() + actual_len, 0);
-        int diff = fixed_total_frames - actual_frames;
-
-        if (diff < 0) {
-            // 减少帧数
-            auto indices = argsort(pred_dur, actual_len, true);
-            int decreased = 0;
-            for (auto idx : indices) {
-                if (pred_dur[idx] > 1 && decreased < std::abs(diff)) {
-                    pred_dur[idx]--;
-                    decreased++;
-                }
-                if (decreased >= std::abs(diff))
-                    break;
-            }
-        }
-        
-        // # 将剩余帧数分配到padding部分
-        // remaining_frames = fixed_total_frames - pred_dur[:actual_len].sum()
-        // padding_len = self.max_seq_len_ - actual_len
-        // if remaining_frames > 0 and padding_len > 0:
-        //     frames_per_padding = remaining_frames // padding_len
-        //     remainder = remaining_frames % padding_len
-        //     pred_dur[actual_len:] = frames_per_padding
-        //     if remainder > 0:
-        //         pred_dur[actual_len:actual_len+remainder] += 1
-
-        actual_frames = std::accumulate(pred_dur.begin(), pred_dur.begin() + actual_len, 0);
-        int remaining_frames = fixed_total_frames - actual_frames;
-        int padding_len = max_seq_len_ - actual_len;
-        // printf("actual_len 4: %d\n ", actual_len);
-        // printf("remaining_frames 4: %d\n", remaining_frames);
-        // printf("padding_len 4: %d\n", padding_len);
-
-        if (remaining_frames > 0 && padding_len > 0) {
-            int frames_per_padding = remaining_frames / padding_len;
-            int remainder = remaining_frames % padding_len;
-
-            for (int i = actual_len; i < pred_dur.size(); i++)
-                pred_dur[i] = frames_per_padding;
-
-            if (remainder > 0) {
-                for (int i = actual_len; i < actual_len + remainder; i++) 
-                    pred_dur[i] += 1;
-            }
-        }
-        
-        // total_frames = pred_dur.sum()
-        total_frames = std::accumulate(pred_dur.begin(), pred_dur.end(), 0);
-        // printf("total_frames: %d\n", total_frames);
-    }
-
-    std::vector<float> create_alignment_matrix_(const std::vector<int>& pred_dur, int total_frames) {
-        // """创建对齐矩阵"""
-        // indices = np.repeat(np.arange(self.max_seq_len_), pred_dur)
-        // pred_aln_trg = np.zeros((self.max_seq_len_, total_frames), dtype=np.float32)
-        // if len(indices) > 0:
-        //     pred_aln_trg[indices, np.arange(total_frames)] = 1.0
-        // return pred_aln_trg[np.newaxis, ...]
-
-        std::vector<int> seq_range(max_seq_len_);
-        std::iota(seq_range.begin(), seq_range.end(), 0);
-        auto indices = np_repeat(seq_range, pred_dur);
-
-        std::vector<float> pred_aln_trg(max_seq_len_ * total_frames);
-        if (!indices.empty()) {
-            int col = 0;
-            for (auto i : indices) {
-                pred_aln_trg[i * total_frames + col] = 1.0f;
-                col++;
-            }
-        }
-
-        return pred_aln_trg;
-    }
-
-    void compute_har_onnx_(std::vector<float>& F0_pred, std::vector<float>& har) {
-        // Querying model inputs is possible but let's just assume one set for this translation or use a check.
-        // For brevity, I'll use the older "tokens" set as default or try to match python logic if I can access names.
-        int64_t input_shape[] = {F0_pred_shape_[0], F0_pred_shape_[1]};
-        std::vector<const char*> input_names = {"F0_pred"};
-
-        std::vector<Ort::Value> input_tensors;
-        
-        // Create tensors
-        auto memory_info = Ort::MemoryInfo::CreateCpu(OrtDeviceAllocator, OrtMemTypeCPU);
-        
-        input_tensors.push_back(Ort::Value::CreateTensor<float>(
-            memory_info, F0_pred.data(), F0_pred.size(), input_shape, F0_pred_shape_.size()));
-
-        // Check model output name usually
-        // Or get it from session
-        std::vector<const char*> output_names = {"har"};
-
-        auto output_tensors = model4_.Run(
-            Ort::RunOptions{nullptr},
-            input_names.data(),
-            input_tensors.data(),
-            input_tensors.size(),
-            output_names.data(),
-            output_names.size()
-        );
-
-        auto& output_tensor = output_tensors.front();
-                
-        // 获取输出信息
-        auto tensor_info = output_tensor.GetTensorTypeAndShapeInfo();
-        size_t element_count = tensor_info.GetElementCount();
-        auto output_shape = tensor_info.GetShape();
-        
-        float* output_data = output_tensor.GetTensorMutableData<float>();
-        
-        har.resize(element_count);
-        std::memcpy(har.data(), output_data, element_count * sizeof(float));
-    }
-
-    void postprocess_x_to_audio_(std::vector<float>& x, std::vector<float>& audio) {
-        // 将频谱转换为音频波形
-        // spec_part = x[:, :self.N_FFT//2+1, :]
-        // phase_part = x[:, self.N_FFT//2+1:, :]
-        int half_n_fft = N_FFT / 2 + 1;
-        int num_frames = x_shape_[2];
-        std::vector<float> spec_part(half_n_fft * num_frames);
-        std::vector<float> phase_part(half_n_fft * num_frames);
-        std::vector<float> cos_part(half_n_fft * num_frames);
-        spec_part.assign(x.begin(), x.begin() + half_n_fft * num_frames);
-        phase_part.assign(x.begin() + half_n_fft * num_frames, x.end());
-        
-        // spec = np.exp(spec_part)
-        // phase = np.sin(phase_part)
-        
-        // spec_torch = torch.from_numpy(spec).float()
-        // phase_torch = torch.from_numpy(phase).float()
-        // cos_part = torch.sqrt(1.0 - phase_torch.pow(2).clamp(0, 1))
-        
-        // real = spec_torch * cos_part
-        // imag = spec_torch * phase_torch
-        // complex_spec = torch.complex(real, imag)
-
-        for (int i = 0; i < half_n_fft * num_frames; i++) {
-            spec_part[i] = expf(spec_part[i]);
-            phase_part[i] = sinf(phase_part[i]);
-            cos_part[i] = sqrtf(1.f - std::max(0.f, std::min(powf(phase_part[i], 2), 1.0f)));
-        }
-
-        FFT_RESULT complex_spec(half_n_fft, vector<complex<float>>(num_frames));
-        for (int i = 0; i < half_n_fft; i++) {
-            for (int n = 0; n < num_frames; n++) {
-                float spec = spec_part[i * num_frames + n];
-
-                float real_part = spec * cos_part[i * num_frames + n];
-                float imag_part = spec * phase_part[i * num_frames + n];
-
-                complex_spec[i][n] = std::complex<float>(real_part, imag_part);
-            }
-        }
-
-        // audio = torch.istft(
-        //     complex_spec, n_fft=self.N_FFT, hop_length=self.HOP_LENGTH,
-        //     win_length=self.N_FFT, window=torch.hann_window(self.N_FFT),
-        //     center=True, return_complex=False
-        // )
-        audio = librosa::Feature::istft(complex_spec, N_FFT, HOP_LENGTH, "hann", true, "reflect", false);
-    }
-
-private:
-    int max_seq_len_;
-    std::string voice_path_;
-    std::string voice_name_;
-    std::vector<float> voice_tensor_;
-
-    AxModelRunner model1_, model2_, model3_;
-    Ort::Env env_;
-    Ort::Session model4_{nullptr};
-    Ort::AllocatorWithDefaultOptions allocator_;
-    std::vector<float> duration_, d_, F0_pred_, N_pred_, asr_, x_;
-    std::vector<int> duration_shape_, d_shape_, F0_pred_shape_, x_shape_;
 };
 
+Kokoro::Kokoro():impl_(std::make_unique<Impl>()){}
+Kokoro::~Kokoro(){uninit();}
+void Kokoro::uninit(){impl_.reset();}
 
-Kokoro::Kokoro():
-    impl_(std::make_unique<Kokoro::Impl>()) {
-
+bool Kokoro::init(AX_TTS_TYPE_E tts_type,AX_TTS_INIT_CONFIG* cfg){
+    std::string vp=std::string(cfg->model_path)+"/vocab.txt";
+    FILE* f=fopen(vp.c_str(),"r"); if(!f){ALOGE("vocab %s",vp.c_str());return false;}
+    char line[256];
+    while(fgets(line,sizeof(line),f)){char* tab=strchr(line,'\t');if(tab){*tab=0;vocab_[line]=atoi(tab+1);}}
+    fclose(f);
+    // Init frontend for text-to-phoneme conversion
+    frontend_ = std::make_shared<KokoroFrontend>();
+    if (!frontend_->init(cfg)) { ALOGE("frontend init failed"); return false; }
+    return impl_->init(tts_type,cfg);
 }
 
-Kokoro::~Kokoro() {
-    uninit();
-}
-
-bool Kokoro::init(AX_TTS_TYPE_E tts_type, const std::string& model_path, const AX_TTS_INIT_CONFIG* init_config) {
-    std::string vocab_path = model_path + "/vocab.txt";
-
-    if (!load_vocab_(vocab_path)) {
-        ALOGE("Load vocab failed!");
-        return false;
-    }
-
-    return impl_->init(tts_type, model_path, init_config);
-}
-
-void Kokoro::uninit(void) {
-    impl_.reset();
-}
-
-bool Kokoro::run(const std::string& text, const AX_TTS_RUN_CONFIG* config, AX_TTS_AUDIO** audio) {
-    int err = 0;
-    std::string language(config->language);
-    auto input_ids = frontend_->run(text, language, vocab_, err);
-    if (err != 0) {
-        ALOGE("Run frontend failed! err=%d", err);
-        return false;
-    }
-
-    int max_len = impl_->get_max_seq_len();
-    if ((int)input_ids.size() <= max_len) {
-        return impl_->run(input_ids, config, audio);
-    }
-
-    auto chunks = split_text_to_fit(frontend_, text, language, vocab_, max_len);
-    if (is_ja_language(language)) {
-        auto merged = merge_short_chunks_for_ja(frontend_, chunks, language, vocab_, max_len);
-        if (!merged.empty()) {
-            chunks.swap(merged);
-        }
-    }
-    if (chunks.empty()) {
-        return impl_->run(input_ids, config, audio);
-    }
-
-    std::vector<float> audio_full;
-    for (size_t i = 0; i < chunks.size(); i++) {
-        int err2 = 0;
-        auto ids = frontend_->run(chunks[i], language, vocab_, err2);
-        if (err2 != 0) {
-            ALOGE("Run frontend failed in chunk %zu! err=%d", i, err2);
-            return false;
-        }
-
-        AX_TTS_AUDIO* seg_audio = nullptr;
-        AX_TTS_RUN_CONFIG seg_cfg = *config;
-        seg_cfg.fade_out = (i + 1 == chunks.size()) ? config->fade_out : 0.0f;
-        if (!impl_->run(ids, &seg_cfg, &seg_audio)) {
-            ALOGE("Run models failed in chunk %zu", i);
-            if (seg_audio) free(seg_audio);
-            return false;
-        }
-
-        if (seg_audio && seg_audio->num_samples > 0) {
-            audio_full.insert(audio_full.end(), seg_audio->data, seg_audio->data + seg_audio->num_samples);
-        }
-        if (seg_audio) free(seg_audio);
-
-        if (i + 1 != chunks.size()) {
-            append_pause(audio_full, config->sample_rate, DEFAULT_PAUSE);
-        }
-    }
-
-    *audio = (AX_TTS_AUDIO*)malloc(sizeof(AX_TTS_AUDIO) + sizeof(float) * audio_full.size());
-    AX_TTS_AUDIO* audio_ptr = *audio;
-    audio_ptr->channels = 1;
-    audio_ptr->num_samples = audio_full.size();
-    audio_ptr->sample_rate = config->sample_rate;
-    std::memcpy(audio_ptr->data, audio_full.data(), sizeof(float) * audio_full.size());
-    return true;
-}
-
-bool Kokoro::load_vocab_(const std::string& vocab_path) {
-    if (!utils::file_exist(vocab_path)) {
-        ALOGE("vocab path(%s) not exist!", vocab_path.c_str());
-        return false;
-    }
-
-    std::ifstream in(vocab_path);
-    if (in.is_open()) {
-        std::string line;
-        while (std::getline(in, line)) {
-            // Expected format: token<TAB>id
-            size_t tab = line.find('\t');
-            if (tab != std::string::npos) {
-                std::string token = line.substr(0, tab);
-                std::string id_str = line.substr(tab + 1);
-                // Unescape token if needed (\n, \r, \t)
-                size_t pos = 0;
-                while((pos = token.find("\\n", pos)) != std::string::npos) { token.replace(pos, 2, "\n"); pos += 1; }
-                pos = 0;
-                while((pos = token.find("\\r", pos)) != std::string::npos) { token.replace(pos, 2, "\r"); pos += 1; }
-                pos = 0;
-                while((pos = token.find("\\t", pos)) != std::string::npos) { token.replace(pos, 2, "\t"); pos += 1; }
-                
-                vocab_[token] = std::stoi(id_str);
-            }
-        }
-    } else {
-        ALOGE("Failed to open vocab file %s", vocab_path.c_str());
-        return false;
-    }
-
-    return true;
+bool Kokoro::run(const std::string& text,AX_TTS_RUN_CONFIG* cfg,AX_TTS_AUDIO** audio){
+    int err=0;
+    std::string lang(cfg->language);
+    auto ids = frontend_->run(text,lang,vocab_,err);
+    if(err!=0||ids.empty()){ALOGE("frontend run failed err=%d",err);return false;}
+    return impl_->run(ids,cfg,audio);
 }
