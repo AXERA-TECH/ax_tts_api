@@ -101,9 +101,7 @@ static bool is_jp_kana_only(const std::string& s) {
 
 static std::map<std::string, AX_TTS_TYPE_E> MODEL_MAP = {
         {"kokoro", AX_KOKORO},
-        {"melotts", AX_MELOTTS},
         {"tts-1", AX_KOKORO},
-        {"tts-1-hd", AX_MELOTTS}
     };
 
 // Infer language code from OpenAI-style voice name prefix.
@@ -199,7 +197,7 @@ static std::vector<char> read_binary_file(const std::string& filepath) {
 
 // Check if model files exist under model_path; returns false with guidance if not.
 static bool check_models_exist(const std::string& model_path) {
-    for (const auto& sub : {"kokoro", "melotts"}) {
+    for (const auto& sub : {"kokoro"}) {
         std::string probe = model_path + "/" + sub;
         if (access(probe.c_str(), F_OK) == 0) return true;
     }
@@ -327,11 +325,7 @@ void TTSServer::setup_routes_() {
         AX_TTS_RUN_CONFIG run_config;
         run_config.fade_out = 0.3f;
         run_config.speed = speed;
-        AX_TTS_TYPE_E tts_type = MODEL_MAP.at(model);
-        if (tts_type == AX_KOKORO)
-            run_config.sample_rate = 24000;
-        else
-            run_config.sample_rate = 44100;
+        run_config.sample_rate = 24000;
 
         std::string voice_str = voice;
         if (voice_str.empty()) {
@@ -425,22 +419,19 @@ AX_TTS_HANDLE TTSServer::load_tts_(const std::string& model_name) {
         ALOGI("Initializing %s ...", model_name.c_str());
 
         AX_TTS_INIT_CONFIG init_config;
-        std::string espeak_path;
-        std::string jieba_path;
-        if (AX_KOKORO == tts_type) {
-            init_config.max_seq_len = 96;
-            espeak_path = espeak_data_path_.empty()
+        std::memset(&init_config, 0, sizeof(init_config));
+        init_config.max_seq_len = 96;
+        {
+            std::string espeak_path = espeak_data_path_.empty()
                 ? pick_path("AX_TTS_ESPEAK_DATA_PATH", "espeak-ng-data")
                 : espeak_data_path_;
-            jieba_path = jieba_dict_path_.empty()
+            std::string jieba_path = jieba_dict_path_.empty()
                 ? pick_path("AX_TTS_JIEBA_DICT_PATH", "dict")
                 : jieba_dict_path_;
-            init_config.espeak_data_path = espeak_path.c_str();
-            init_config.jieba_dict_path = jieba_path.c_str();
-        } else if (AX_MELOTTS == tts_type) {
-            init_config.max_seq_len = 128;
+            std::strncpy(init_config.espeak_data_path, espeak_path.c_str(), AX_TTS_MAX_STR_LEN - 1);
+            std::strncpy(init_config.jieba_dict_path, jieba_path.c_str(), AX_TTS_MAX_STR_LEN - 1);
         }
-        init_config.model_path = model_path_.c_str();
+        std::strncpy(init_config.model_path, model_path_.c_str(), AX_TTS_MAX_STR_LEN - 1);
         
         AX_TTS_HANDLE new_handle = NULL;
         AX_TTS_ERROR_E err = AX_TTS_Init(tts_type, &init_config, &new_handle);

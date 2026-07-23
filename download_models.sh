@@ -5,32 +5,33 @@ AX650_PATH="models-ax650"
 AX630C_PATH="models-ax630c"
 KOKORO_PATH="kokoro"
 
-mkdir -p $AX650_PATH
-mkdir -p $AX630C_PATH
-
 mkdir -p $AX650_PATH/$KOKORO_PATH
-
 mkdir -p $AX630C_PATH/$KOKORO_PATH
 
 export HF_ENDPOINT=https://hf-mirror.com
 
-# kokoro
-hf download AXERA-TECH/kokoro.axera models/kokoro_part1_96.axmodel --local-dir $AX650_PATH/$KOKORO_PATH
-hf download AXERA-TECH/kokoro.axera models/kokoro_part2_96.axmodel --local-dir $AX650_PATH/$KOKORO_PATH
-hf download AXERA-TECH/kokoro.axera models/kokoro_part3_96.axmodel --local-dir $AX650_PATH/$KOKORO_PATH
-hf download AXERA-TECH/kokoro.axera models/model4_har_sim.onnx --local-dir $AX650_PATH/$KOKORO_PATH
-hf download AXERA-TECH/kokoro.axera models_620E/kokoro_part1_96.axmodel --local-dir $AX630C_PATH/$KOKORO_PATH
-hf download AXERA-TECH/kokoro.axera models_620E/kokoro_part2_96.axmodel --local-dir $AX630C_PATH/$KOKORO_PATH
-hf download AXERA-TECH/kokoro.axera models_620E/kokoro_part3_96.axmodel --local-dir $AX630C_PATH/$KOKORO_PATH
-hf download AXERA-TECH/kokoro.axera models_620E/model4_har_sim.onnx --local-dir $AX630C_PATH/$KOKORO_PATH
-mv $AX650_PATH/$KOKORO_PATH/models/* $AX650_PATH/$KOKORO_PATH
-mv $AX630C_PATH/$KOKORO_PATH/models_620E/* $AX630C_PATH/$KOKORO_PATH
+# Download 5 model files for AX650 (from inoryQwQ/kokoro.best)
+hf download inoryQwQ/kokoro.best models/kokoro_enc_axera.axmodel --local-dir $AX650_PATH/$KOKORO_PATH
+hf download inoryQwQ/kokoro.best models/kokoro_f0n.axmodel --local-dir $AX650_PATH/$KOKORO_PATH
+hf download inoryQwQ/kokoro.best models/kokoro_dec.axmodel --local-dir $AX650_PATH/$KOKORO_PATH
+hf download inoryQwQ/kokoro.best models/kokoro_har_noup.onnx --local-dir $AX650_PATH/$KOKORO_PATH
+hf download inoryQwQ/kokoro.best models/kokoro_istft.onnx --local-dir $AX650_PATH/$KOKORO_PATH
 
+# Download 5 model files for AX630C
+hf download inoryQwQ/kokoro.best models/kokoro_enc_axera.axmodel --local-dir $AX630C_PATH/$KOKORO_PATH
+hf download inoryQwQ/kokoro.best models/kokoro_f0n.axmodel --local-dir $AX630C_PATH/$KOKORO_PATH
+hf download inoryQwQ/kokoro.best models/kokoro_dec.axmodel --local-dir $AX630C_PATH/$KOKORO_PATH
+hf download inoryQwQ/kokoro.best models/kokoro_har_noup.onnx --local-dir $AX630C_PATH/$KOKORO_PATH
+hf download inoryQwQ/kokoro.best models/kokoro_istft.onnx --local-dir $AX630C_PATH/$KOKORO_PATH
+
+# Copy vocab.txt
 cp dict/vocab.txt $AX650_PATH/$KOKORO_PATH
 cp dict/vocab.txt $AX630C_PATH/$KOKORO_PATH
-git clone https://github.com/AXERA-TECH/kokoro.axera.git --depth=1
-cp -r kokoro.axera/cpp/voices $AX650_PATH/$KOKORO_PATH
-cp -r kokoro.axera/cpp/voices $AX630C_PATH/$KOKORO_PATH
-rm -rf kokoro.axera
+
+# Clone voices from kokoro.best repo
+git clone https://hf-mirror.com/inoryQwQ/kokoro.best --depth=1 tmp_kokoro_best
+cp -r tmp_kokoro_best/models/voices $AX650_PATH/$KOKORO_PATH
+cp -r tmp_kokoro_best/models/voices $AX630C_PATH/$KOKORO_PATH
+rm -rf tmp_kokoro_best
 
 echo "ALL DONE"

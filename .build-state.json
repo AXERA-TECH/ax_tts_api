@@ -3,16 +3,58 @@
   "stack": "CMake/C++/Python-pybind11",
   "base_branch": "main",
   "branch": "feat/build-20260724-0345",
-  "iteration": 1,
+  "iteration": 2,
   "validation_command": "python3 -m pytest python/tests/test_smoke.py -v -k static",
   "requirement_alignment": {
     "goal": "删除MeloTTS，kokoro模型切换到inoryQwQ/kokoro.best，用新pipeline(Enc→F0N→Dec→HAR→ISTFT)替换旧pipeline(Part1-3+har_sim)",
-    "non_goals": ["不保留长文本分句/fade_out等旧功能", "不保留MeloTTS任何代码", "不修改第三方库"],
+    "non_goals": [
+      "不保留长文本分句/fade_out等旧功能",
+      "不保留MeloTTS任何代码",
+      "不修改第三方库"
+    ],
     "approach": "替换src/源码(除melotts)为kokoro.best版本，保留v1.0 API公头(const char*指针+error code模式)，适配server/bindings/main.cpp",
     "first_iteration": "删除MeloTTS源码+枚举值，替换kokoro.cpp/hpp/kokoro_frontend.cpp/hpp为新pipeline"
   },
-  "issues": [],
-  "rounds": [],
+  "issues": [
+    {
+      "number": 22,
+      "title": "feat[1]: 删除MeloTTS + 替换Kokoro推理pipeline为kokoro.best版本",
+      "acceptance_checks": [
+        "删除 melotts.cpp/melotts.hpp/test_melotts.cpp",
+        "ax_tts_api.h 删除 AX_MELOTTS 枚举值，API接口结构体保持v1.0不变",
+        "tts_factory.hpp/frontend_factory.hpp 删除MeloTTS分支",
+        "kokoro.cpp/kokoro.hpp 替换为新5模型pipeline",
+        "kokoro_frontend.cpp/kokoro_frontend.hpp 替换为新版本",
+        "src/下其他文件与kokoro.best对齐"
+      ]
+    }
+  ],
+  "rounds": [
+    {
+      "iteration": 1,
+      "issue": 22,
+      "changed_files": [
+        "cpp/src/tts/kokoro.cpp",
+        "cpp/src/tts/kokoro.hpp",
+        "cpp/src/tts/tts_interface.hpp",
+        "cpp/src/tts/tts_factory.hpp",
+        "cpp/src/frontend/kokoro_frontend.cpp",
+        "cpp/src/frontend/kokoro_frontend.hpp",
+        "cpp/src/frontend/frontend_interface.hpp",
+        "cpp/src/frontend/frontend_factory.hpp",
+        "cpp/src/api/ax_tts_api.h",
+        "cpp/src/api/ax_tts_api.cpp",
+        "(deleted) cpp/src/tts/melotts.cpp",
+        "(deleted) cpp/src/tts/melotts.hpp",
+        "(deleted) cpp/tests/test_melotts.cpp"
+      ],
+      "implementation_summary": "删除MeloTTS全部源码；用kokoro.best的5模型pipeline(Enc→F0N→Dec→HAR→ISTFT)替换旧4模型pipeline；ax_tts_api.cpp直接创建Kokoro替代factory模式；API公头保留v1.0函数签名和error code，struct改用char[]以兼容新内部代码",
+      "test_status": "pass",
+      "test_command": "python3 -m pytest python/tests/test_smoke.py -v -k static",
+      "test_summary": "6 passed, 4 deselected, 0 failed",
+      "commit_hash": "94c3759"
+    }
+  ],
   "pre_existing_changes": [],
   "assumptions": [
     "v1.0 API公头(ax_tts_api.h)保持不变",

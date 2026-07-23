@@ -110,7 +110,7 @@ private:
      * {
      *      "input": "The text to generate audio for."
      *      "instructions": We use instructions for language choice for compatibilty. Supports zh, en, ja, etc.
-     *      "model": Supports kokoro and melotts
+     *      "model": Supports kokoro
      *      "speed": The speed of the generated audio. Select a value from 0.25 to 4.0. 1.0 is the default.
      *      "response_format": The format to audio in. Supported formats are mp3, wav. Default to mp3.
      * }
