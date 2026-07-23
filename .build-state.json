@@ -3,7 +3,7 @@
   "stack": "CMake/C++/Python-pybind11",
   "base_branch": "main",
   "branch": "feat/build-20260724-0345",
-  "iteration": 2,
+  "iteration": 3,
   "validation_command": "python3 -m pytest python/tests/test_smoke.py -v -k static",
   "requirement_alignment": {
     "goal": "删除MeloTTS，kokoro模型切换到inoryQwQ/kokoro.best，用新pipeline(Enc→F0N→Dec→HAR→ISTFT)替换旧pipeline(Part1-3+har_sim)",
@@ -26,6 +26,17 @@
         "kokoro.cpp/kokoro.hpp 替换为新5模型pipeline",
         "kokoro_frontend.cpp/kokoro_frontend.hpp 替换为新版本",
         "src/下其他文件与kokoro.best对齐"
+      ]
+    },
+    {
+      "number": 23,
+      "title": "feat[2]: 更新 server/bindings/main 适配新Kokoro，重写download_models.sh",
+      "acceptance_checks": [
+        "tts_server.cpp/tts_server.hpp 删除 MeloTTS 分支和 MODEL_MAP",
+        "main.cpp 删除 melotts 探测逻辑",
+        "bindings.cpp 删除 MELOTTS 枚举",
+        "download_models.sh 从 inoryQwQ/kokoro.best 下载5模型+voices+vocab",
+        "scripts/test_tts_server.py 删除 melotts 选项"
       ]
     }
   ],
@@ -53,6 +64,22 @@
       "test_command": "python3 -m pytest python/tests/test_smoke.py -v -k static",
       "test_summary": "6 passed, 4 deselected, 0 failed",
       "commit_hash": "94c3759"
+    },
+    {
+      "iteration": 2,
+      "issue": 23,
+      "changed_files": [
+        "cpp/server/tts_server.cpp",
+        "cpp/server/tts_server.hpp",
+        "cpp/main.cpp",
+        "python/src/bindings.cpp",
+        "download_models.sh"
+      ],
+      "implementation_summary": "tts_server移除MeloTTS MODEL_MAP条目和sample_rate分支，适配char[] config structs；main.cpp移除melotts探测；bindings.cpp移除MELOTTS python枚举；download_models.sh完全重写为从inoryQwQ/kokoro.best下载5模型+voices",
+      "test_status": "pass",
+      "test_command": "python3 -m pytest python/tests/test_smoke.py -v -k static",
+      "test_summary": "6 passed, 0 failed",
+      "commit_hash": "58233a5"
     }
   ],
   "pre_existing_changes": [],
