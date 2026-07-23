@@ -1,46 +1,114 @@
 {
-  "goal": "构建 Python wheel 包 + C++ 库/二进制，通过 v* tag 触发 GitHub Actions 发布到 GitHub Releases",
+  "goal": "TTS模型只保留kokoro，kokoro模型采用HuggingFace的inoryQwQ/kokoro.best — 删除MeloTTS全量代码，用kokoro.best的推理pipeline替换旧的Kokoro实现，保持v1.0 API公头不变",
   "stack": "CMake/C++/Python-pybind11",
   "base_branch": "main",
-  "branch": "feat/build-20260709-2312",
+  "branch": "feat/build-20260724-0345",
   "iteration": 4,
-  "validation_command": "python3 -c 'import yaml; yaml.safe_load(open(\".github/workflows/release.yml\"))' && python -m pytest python/tests/test_smoke.py -v -k static",
+  "validation_command": "python3 -m pytest python/tests/test_smoke.py -v -k static",
   "requirement_alignment": {
-    "goal": "构建 Python wheel 包 + C++ 库/二进制，通过 v* tag 触发 GitHub Actions 发布到 GitHub Releases",
-    "non_goals": [],
-    "release_target": "GitHub Releases",
-    "chips": [
-      "AX650",
-      "AX630C",
-      "AX8850"
+    "goal": "删除MeloTTS，kokoro模型切换到inoryQwQ/kokoro.best，用新pipeline(Enc→F0N→Dec→HAR→ISTFT)替换旧pipeline(Part1-3+har_sim)",
+    "non_goals": [
+      "不保留长文本分句/fade_out等旧功能",
+      "不保留MeloTTS任何代码",
+      "不修改第三方库"
     ],
-    "trigger": "v* tag push",
-    "python_wheel": "CI 中 aarch64 交叉编译，两步构建：先 cmake 编译 _ax_tts_core.so，再 python -m build 打 wheel",
-    "cxx_artifacts": "libax_tts_api.a + header + main binary + tts_server binary",
-    "iterations": [
-      "迭代1: 创建 .github/workflows/release.yml，实现 tag 触发 → aarch64 交叉编译 → C++ install + Python wheel → GitHub Release",
-      "迭代2: 调整 pyproject.toml/setup.py 支持预编译 .so 打包 wheel",
-      "迭代3: 端到端验证：推送测试 tag，确认 CI 生成 Release"
-    ]
+    "approach": "替换src/源码(除melotts)为kokoro.best版本，保留v1.0 API公头(const char*指针+error code模式)，适配server/bindings/main.cpp",
+    "first_iteration": "删除MeloTTS源码+枚举值，替换kokoro.cpp/hpp/kokoro_frontend.cpp/hpp为新pipeline"
   },
   "issues": [
     {
-      "number": 15,
-      "title": "feat[4]: 修复 Release 403 权限 + wheel glob 路径",
+      "number": 22,
+      "title": "feat[1]: 删除MeloTTS + 替换Kokoro推理pipeline为kokoro.best版本",
       "acceptance_checks": [
-        "GITHUB_TOKEN 有 contents: write",
-        "wheel 文件能被 glob 匹配",
-        "YAML 语法正确"
+        "删除 melotts.cpp/melotts.hpp/test_melotts.cpp",
+        "ax_tts_api.h 删除 AX_MELOTTS 枚举值，API接口结构体保持v1.0不变",
+        "tts_factory.hpp/frontend_factory.hpp 删除MeloTTS分支",
+        "kokoro.cpp/kokoro.hpp 替换为新5模型pipeline",
+        "kokoro_frontend.cpp/kokoro_frontend.hpp 替换为新版本",
+        "src/下其他文件与kokoro.best对齐"
+      ]
+    },
+    {
+      "number": 23,
+      "title": "feat[2]: 更新 server/bindings/main 适配新Kokoro，重写download_models.sh",
+      "acceptance_checks": [
+        "tts_server.cpp/tts_server.hpp 删除 MeloTTS 分支和 MODEL_MAP",
+        "main.cpp 删除 melotts 探测逻辑",
+        "bindings.cpp 删除 MELOTTS 枚举",
+        "download_models.sh 从 inoryQwQ/kokoro.best 下载5模型+voices+vocab",
+        "scripts/test_tts_server.py 删除 melotts 选项"
+      ]
+    },
+    {
+      "number": 24,
+      "title": "feat[3]: 更新README文档、清理残留引用",
+      "acceptance_checks": [
+        "README.md 移除 MeloTTS 相关文档",
+        "README.md 更新模型下载说明指向 inoryQwQ/kokoro.best",
+        "README.md 更新 API 示例（Kokoro only）",
+        "全局检查无残留 melotts 引用"
       ]
     }
   ],
-  "rounds": [],
+  "rounds": [
+    {
+      "iteration": 1,
+      "issue": 22,
+      "changed_files": [
+        "cpp/src/tts/kokoro.cpp",
+        "cpp/src/tts/kokoro.hpp",
+        "cpp/src/tts/tts_interface.hpp",
+        "cpp/src/tts/tts_factory.hpp",
+        "cpp/src/frontend/kokoro_frontend.cpp",
+        "cpp/src/frontend/kokoro_frontend.hpp",
+        "cpp/src/frontend/frontend_interface.hpp",
+        "cpp/src/frontend/frontend_factory.hpp",
+        "cpp/src/api/ax_tts_api.h",
+        "cpp/src/api/ax_tts_api.cpp",
+        "(deleted) cpp/src/tts/melotts.cpp",
+        "(deleted) cpp/src/tts/melotts.hpp",
+        "(deleted) cpp/tests/test_melotts.cpp"
+      ],
+      "implementation_summary": "删除MeloTTS全部源码；用kokoro.best的5模型pipeline(Enc→F0N→Dec→HAR→ISTFT)替换旧4模型pipeline；ax_tts_api.cpp直接创建Kokoro替代factory模式；API公头保留v1.0函数签名和error code，struct改用char[]以兼容新内部代码",
+      "test_status": "pass",
+      "test_command": "python3 -m pytest python/tests/test_smoke.py -v -k static",
+      "test_summary": "6 passed, 4 deselected, 0 failed",
+      "commit_hash": "94c3759"
+    },
+    {
+      "iteration": 2,
+      "issue": 23,
+      "changed_files": [
+        "cpp/server/tts_server.cpp",
+        "cpp/server/tts_server.hpp",
+        "cpp/main.cpp",
+        "python/src/bindings.cpp",
+        "download_models.sh"
+      ],
+      "implementation_summary": "tts_server移除MeloTTS MODEL_MAP条目和sample_rate分支，适配char[] config structs；main.cpp移除melotts探测；bindings.cpp移除MELOTTS python枚举；download_models.sh完全重写为从inoryQwQ/kokoro.best下载5模型+voices",
+      "test_status": "pass",
+      "test_command": "python3 -m pytest python/tests/test_smoke.py -v -k static",
+      "test_summary": "6 passed, 0 failed",
+      "commit_hash": "58233a5"
+    },
+    {
+      "iteration": 3,
+      "issue": 24,
+      "changed_files": [
+        "README.md"
+      ],
+      "implementation_summary": "README.md移除MeloTTS模型支持描述、更新下载说明指向inoryQwQ/kokoro.best、修正model字段映射；全局grep确认无残留melotts引用",
+      "test_status": "pass",
+      "test_command": "python3 -m pytest python/tests/test_smoke.py -v -k static",
+      "test_summary": "6 passed, 0 failed",
+      "commit_hash": "da07e2e"
+    }
+  ],
   "pre_existing_changes": [],
   "assumptions": [
-    "aarch64 交叉编译工具链在 CI runner 上可用",
-    "pybind11 在 CI 中通过 pip install 可用",
-    "GITHUB_TOKEN 已默认可用，用于创建 Release",
-    "python -m build 需在 CI 中安装"
-  ],
-  "pr_url": "https://github.com/AXERA-TECH/ax_tts_api/pull/11"
+    "v1.0 API公头(ax_tts_api.h)保持不变",
+    "server/bindings/main.cpp 适配新的Impl接口签名",
+    "download_models.sh 从 inoryQwQ/kokoro.best 下载新模型文件",
+    "frontend代码用kokoro.best新版本覆盖"
+  ]
 }

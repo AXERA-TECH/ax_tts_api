@@ -69,7 +69,7 @@ int main(int argc, char** argv) {
     // Check model files exist before init
     {
         bool found = false;
-        for (const auto& sub : {"kokoro", "melotts"}) {
+        for (const auto& sub : {"kokoro"}) {
             std::string probe = model_path + "/" + sub;
             if (access(probe.c_str(), F_OK) == 0) { found = true; break; }
         }

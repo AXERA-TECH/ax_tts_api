@@ -12,7 +12,6 @@ PYBIND11_MODULE(_ax_tts_core, m) {
     // AX_TTS_TYPE_E enum
     py::enum_<AX_TTS_TYPE_E>(m, "TTSType", py::arithmetic())
         .value("KOKORO", AX_KOKORO)
-        .value("MELOTTS", AX_MELOTTS)
         .export_values();
 
     // AX_TTS_INIT_CONFIG

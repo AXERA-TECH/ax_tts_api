@@ -11,7 +11,7 @@ C++ TTS API on Axera platforms with Python bindings.
  - AX8850
 
 支持模型:
-- Kokoro
+- Kokoro (inoryQwQ/kokoro.best)
 
 ## 版本
 
@@ -94,12 +94,12 @@ int main() {
 
 ## 下载模型
 
-安装huggingface_hub
+安装 huggingface_hub:
 ```bash
 pip3 install -U huggingface_hub
 ```
 
-运行下载脚本:
+从 [inoryQwQ/kokoro.best](https://hf-mirror.com/inoryQwQ/kokoro.best) 下载模型:
 ```bash
 bash download_models.sh
 ```
@@ -312,7 +312,7 @@ options:
 
 | 字段 | 说明 |
 |---|---|
-| `model` | `"tts-1"` (kokoro) / `"tts-1-hd"` (melotts)，也可用内部名 `"kokoro"` / `"melotts"` |
+| `model` | `"tts-1"` 或内部名 `"kokoro"` |
 | `input` | 输入文本 (UTF-8)，最长 4096 字符 |
 | `voice` | 音色名，支持 OpenAI 名称 (alloy/echo/fable/onyx/nova/shimmer) 和内部分类名 (af_heart/zf_xiaoxiao/jf_gongitsune) |
 | `speed` | 语速 0.25–4.0，默认 1.0 |

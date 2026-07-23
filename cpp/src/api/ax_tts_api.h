@@ -37,10 +37,11 @@ extern "C" {
 
 #define AX_TTS_API __attribute__((visibility("default")))
 
+#define AX_TTS_MAX_STR_LEN  256
+
 /** 支持的 TTS 模型类型 */
 typedef enum {
-    AX_KOKORO = 0,
-    AX_MELOTTS
+    AX_KOKORO = 0
 } AX_TTS_TYPE_E;
 
 /** API 错误码。0 = 成功，负值 = 失败。 */
@@ -60,24 +61,21 @@ typedef enum {
 } AX_TTS_ERROR_E;
 
 /** 初始化配置。
- *  字符串字段为调用方所有的 C 字符串指针；AX_TTS_Init 内部会在需要时拷贝。
- *  调用方需保证指针在 AX_TTS_Init 返回前有效。 */
+ *  字符串字段最大长度 AX_TTS_MAX_STR_LEN-1。 */
 typedef struct {
-    int max_seq_len;          /**< 最大序列长度，Kokoro 默认 96，MeloTTS 默认 128 */
-    const char* model_path;   /**< 模型文件目录路径 */
-    const char* espeak_data_path; /**< espeak-ng-data 目录路径 */
-    const char* jieba_dict_path;  /**< jieba 词典目录路径（中文必需） */
+    int max_seq_len;          /**< 最大序列长度，Kokoro 默认 96 */
+    char model_path[AX_TTS_MAX_STR_LEN];   /**< 模型文件目录路径 */
+    char espeak_data_path[AX_TTS_MAX_STR_LEN]; /**< espeak-ng-data 目录路径 */
+    char jieba_dict_path[AX_TTS_MAX_STR_LEN];  /**< jieba 词典目录路径（中文必需） */
 } AX_TTS_INIT_CONFIG;
 
-/** 推理运行配置。
- *  同 INIT_CONFIG，字符串字段为调用方所有的 C 字符串指针，
- *  调用方需保证指针在 AX_TTS_Run 返回前有效。 */
+/** 推理运行配置。 */
 typedef struct {
     float speed;              /**< 语速，1.0 为正常 */
     float fade_out;           /**< 末尾淡出时长（秒），0 为不淡出 */
     int sample_rate;          /**< 输出采样率，Kokoro 建议 24000 */
-    const char* voice;        /**< 音色名称，如 "af_heart", "zf_xiaoxiao" */
-    const char* language;     /**< ISO-639 语言代码，如 "en", "zh", "ja" */
+    char voice[AX_TTS_MAX_STR_LEN];        /**< 音色名称，如 "af_heart" */
+    char language[AX_TTS_MAX_STR_LEN];     /**< ISO-639 语言代码，如 "en", "zh", "ja" */
 } AX_TTS_RUN_CONFIG;
 
 /** 合成音频输出。
@@ -111,7 +109,7 @@ AX_TTS_API const char* AX_TTS_GetErrorString(AX_TTS_ERROR_E err);
 /**
  * @brief 初始化 TTS 引擎。
  * 
- * @param tts_type    TTS 模型类型（AX_KOKORO 或 AX_MELOTTS）。
+ * @param tts_type    TTS 模型类型。
  * @param init_config 初始化配置指针，不可为 NULL。
  * @param handle      输出参数，成功时指向新创建的 TTS 句柄。
  * 
@@ -123,11 +121,6 @@ AX_TTS_API const char* AX_TTS_GetErrorString(AX_TTS_ERROR_E err);
  * @return AX_TTS_ERR_OUT_OF_MEMORY  内存不足
  * 
  * @note 调用方必须在不再使用时调用 AX_TTS_Uninit 释放资源。
- * @example
- *   AX_TTS_INIT_CONFIG cfg = {.max_seq_len = 96, .model_path = "./models-ax650",
- *                              .espeak_data_path = "espeak-ng-data"};
- *   AX_TTS_HANDLE h = NULL;
- *   if (AX_TTS_Init(AX_KOKORO, &cfg, &h) != AX_TTS_OK) { ... }
  */
 AX_TTS_API AX_TTS_ERROR_E AX_TTS_Init(AX_TTS_TYPE_E tts_type,
                                        const AX_TTS_INIT_CONFIG* init_config,

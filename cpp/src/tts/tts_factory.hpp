@@ -14,25 +14,18 @@
 #include "api/ax_tts_api.h"
 #include "utils/logger.h"
 #include "tts/kokoro.hpp"
-#include "tts/melotts.hpp"
 #include "frontend/frontend_factory.hpp"
 
 class TTSFactory {
 public:
-    static TTSInterface* create(AX_TTS_TYPE_E tts_type, const AX_TTS_INIT_CONFIG* tts_init_config) {
+    static TTSInterface* create(AX_TTS_TYPE_E tts_type, AX_TTS_INIT_CONFIG* tts_init_config) {
         TTSInterface* interface = nullptr;
-        std::string model_path;
         
         switch (tts_type)
         {
         case AX_KOKORO: {
             interface = new Kokoro();
-            model_path = std::string(tts_init_config->model_path) + "/kokoro/";
-            break;
-        }
-        case AX_MELOTTS: {
-            interface = new MeloTTS();
-            model_path = std::string(tts_init_config->model_path) + "/melotts/";
+            sprintf(tts_init_config->model_path, "%s/kokoro/", tts_init_config->model_path);
             break;
         }
         default:
@@ -49,7 +42,7 @@ public:
 
         interface->set_frontend(frontend);
 
-        if (!interface->init(tts_type, model_path, tts_init_config)) {
+        if (!interface->init(tts_type, tts_init_config)) {
             ALOGE("Init tts failed!");
             delete interface;
             return nullptr;
