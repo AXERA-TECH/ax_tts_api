@@ -3,7 +3,7 @@
   "stack": "CMake/C++/Python-pybind11",
   "base_branch": "main",
   "branch": "feat/build-20260724-0345",
-  "iteration": 3,
+  "iteration": 4,
   "validation_command": "python3 -m pytest python/tests/test_smoke.py -v -k static",
   "requirement_alignment": {
     "goal": "删除MeloTTS，kokoro模型切换到inoryQwQ/kokoro.best，用新pipeline(Enc→F0N→Dec→HAR→ISTFT)替换旧pipeline(Part1-3+har_sim)",
@@ -37,6 +37,16 @@
         "bindings.cpp 删除 MELOTTS 枚举",
         "download_models.sh 从 inoryQwQ/kokoro.best 下载5模型+voices+vocab",
         "scripts/test_tts_server.py 删除 melotts 选项"
+      ]
+    },
+    {
+      "number": 24,
+      "title": "feat[3]: 更新README文档、清理残留引用",
+      "acceptance_checks": [
+        "README.md 移除 MeloTTS 相关文档",
+        "README.md 更新模型下载说明指向 inoryQwQ/kokoro.best",
+        "README.md 更新 API 示例（Kokoro only）",
+        "全局检查无残留 melotts 引用"
       ]
     }
   ],
@@ -80,6 +90,18 @@
       "test_command": "python3 -m pytest python/tests/test_smoke.py -v -k static",
       "test_summary": "6 passed, 0 failed",
       "commit_hash": "58233a5"
+    },
+    {
+      "iteration": 3,
+      "issue": 24,
+      "changed_files": [
+        "README.md"
+      ],
+      "implementation_summary": "README.md移除MeloTTS模型支持描述、更新下载说明指向inoryQwQ/kokoro.best、修正model字段映射；全局grep确认无残留melotts引用",
+      "test_status": "pass",
+      "test_command": "python3 -m pytest python/tests/test_smoke.py -v -k static",
+      "test_summary": "6 passed, 0 failed",
+      "commit_hash": "da07e2e"
     }
   ],
   "pre_existing_changes": [],
